@@ -92,7 +92,7 @@
 
 (defconst org-gcal-events-url "https://www.googleapis.com/calendar/v3/calendars/%s/events")
 
-(defun org-gcal-sync ()
+(defun org-gcal-fetch ()
   (interactive)
   (unless org-gcal-token-plist 
     (org-gcal-request-token))
@@ -109,17 +109,52 @@
                           (timeMin . org-gcal--subsract-time)
                           (timeMax . org-gcal--add-time)
                           ("grant_type" . "authorization_code"))
-
                 :parser 'org-gcal--json-read)
                (deferred:nextc it
                  (lambda (response)
+                   (setq temp (request-response-data response))
                    (write-region
-                    (mapconcat 'cdr
+                    (mapconcat 'identity
                                (mapcar (lambda (lst) 
                                          (org-gcal--cons-list lst))
                                        (plist-get (request-response-data response) :items ))
                                "") 
                     nil (cdr x))))))))
+
+(defun org-gcal-post-at-point ()
+  (interactive)
+  (unless org-gcal-token-plist 
+    (org-gcal-request-token))
+  (save-excursion
+    (end-of-line)
+    (re-search-backward org-heading-regexp)
+    (re-search-forward "<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]")
+    (backward-char 11)
+    (let* ((elem (org-element-at-point))
+           (tobj (org-element-timestamp-parser))
+           (smry (replace-regexp-in-string 
+                  "\s?<.*$" ""
+                  (car (org-element-map elem 'headline (lambda (hl) (org-element-property :raw-value hl))))))
+           (loc  (car (org-element-map elem 'headline (lambda (hl) (org-element-property :LOCATION hl)))))
+           (id  (car (org-element-map elem 'headline (lambda (hl) (org-element-property :ID hl)))))
+           (start (org-gcal--format-org2iso
+                   (plist-get (cadr tobj) :year-start)
+                   (plist-get (cadr tobj) :month-start)
+                   (plist-get (cadr tobj) :day-start)
+                   (plist-get (cadr tobj) :hour-start)
+                   (plist-get (cadr tobj) :minute-start)))
+           (end (org-gcal--format-org2iso
+                 (plist-get (cadr tobj) :year-end)
+                 (plist-get (cadr tobj) :month-end)
+                 (plist-get (cadr tobj) :day-end)
+                 (plist-get (cadr tobj) :hour-end)
+                 (plist-get (cadr tobj) :minute-end)))
+           (desc (replace-regexp-in-string
+                  "\n  :PROPERTIES:\n .:LOCATION:.*\n  :LINK:.*\n  :ID:.*\n  :END:\n" ""
+                  (buffer-substring-no-properties
+                   (plist-get (cadr elem) :contents-begin)
+                   (plist-get (cadr elem) :contents-end)))))
+      (org-gcal--post-event start end smry loc desc id))))
 
 (defun org-gcal-request-authorization ()
   "Request OAuth authorization at AUTH-URL by launching `browse-url'.
@@ -266,28 +301,107 @@ TO.  Instead an empty string is returned."
      ;;(if (and repeat (not (string= repeat ""))) (concat " " repeat) "")
      ">")))
 
+(defun org-gcal--format-org2iso (year mon day &optional hour min) 
+  (concat
+   (format-time-string 
+    (if (or hour min) "%Y-%m-%dT%H:%M" "%Y-%m-%d")
+    (seconds-to-time
+     (time-to-seconds
+      (encode-time 0 
+                   (if min min 0)
+                   (if hour hour 0)
+                   day mon year))))
+   (if (or hour min) (format "+%02d:00" (/ (car (current-time-zone)) 3600)))))
+
 (defun org-gcal--cons-list (plst)
+
   (let* ((smry  (plist-get plst :summary))
          (desc  (plist-get plst :description))
          (loc   (plist-get plst :location))
          (link  (plist-get plst :htmlLink))
-         (start (plist-get (plist-get plst :start)
+         (id    (plist-get plst :id))
+         (stime (plist-get (plist-get plst :start)
                            :dateTime))
-         (end   (plist-get (plist-get plst :end)
+         (etime (plist-get (plist-get plst :end)
                            :dateTime))
-         (hash  (md5 (concat smry desc loc link start end))))
-    (cons hash
-          (concat
-           "* " smry "\n"
-           "  " (if (org-gcal--alldayp start end)
-                    (org-gcal--format-iso2org start)
-                  (when desc "  ") desc (when desc "\n")
-                  (concat (org-gcal--format-iso2org start) "-" (org-gcal--format-iso2org end))) "\n\n"
-                  "  [[" link "][Go to gcal web page]]\n"
-                  "  :PROPERTIES:\n"
-                  "  :LOCATION: " loc "\n"
-                  "  :GcalHash: " hash "\n"
-                  "  :END:\n\n"))))
+         (sday  (plist-get (plist-get plst :start)
+                           :date))
+         (eday  (plist-get (plist-get plst :end)
+                           :date))
+         (start (if stime stime sday))
+         (end   (if etime etime eday)))
+    (concat
+     "* " smry 
+     " " (if (org-gcal--alldayp start end)
+             (org-gcal--format-iso2org start)
+           (if (and
+                (= (plist-get (org-gcal--parse-date start) :year) 
+                   (plist-get (org-gcal--parse-date end) :year))
+                (= (plist-get (org-gcal--parse-date start) :mon) 
+                   (plist-get (org-gcal--parse-date end) :mon))
+                (= (plist-get (org-gcal--parse-date start) :day) 
+                   (plist-get (org-gcal--parse-date end) :day)))
+               (concat "<"
+                       (org-gcal--format-date start "%Y-%m-%d %a %H:%M")
+                       "-"
+                       (org-gcal--format-date end "%H:%M")
+                       ">")
+             (concat (org-gcal--format-iso2org start)
+                     "--"
+                     (org-gcal--format-iso2org end)))) "\n\n"
+                     desc (when desc "\n")
+                     "  :PROPERTIES:\n"
+                     "  :LOCATION: " loc "\n"
+                     "  :LINK: ""[[" link "][Go to gcal web page]]\n"
+                     "  :ID: " id "\n"
+                     "  :END:\n\n")))
+
+(defun org-gcal--format-date (str format &optional tz) 
+  (let ((plst (org-gcal--parse-date str)))
+    (concat
+     (format-time-string format
+                         ;;(if (< 11 (length str)) "%Y-%m-%d %a %H:%M" "%Y-%m-%d %a")
+                         (seconds-to-time
+                          (+ (if tz (car (current-time-zone)) 0)
+                             (time-to-seconds
+                              (encode-time
+                               (plist-get plst :sec)
+                               (plist-get plst :min)
+                               (plist-get plst :hour)
+                               (plist-get plst :day)
+                               (plist-get plst :mon)
+                               (plist-get plst :year)))))))))
+
+(defun org-gcal--param-date (str)
+  (if (< 11 (length str)) "dateTime" "date"))
+
+(defun org-gcal--post-event (start end smry loc desc &optional id)
+  (unless org-gcal-token-plist 
+    (org-gcal-request-token))
+  (cl-loop for x in org-gcal-file-alist
+           do
+           (lexical-let ((stime (org-gcal--param-date start))
+                         (etime (org-gcal--param-date end)))
+             (request
+              (concat
+               (format org-gcal-events-url (car x)) 
+               (when id 
+                 (concat "/" id)))
+              :type (if id "PATCH" "POST")
+              :headers '(("Content-Type" . "application/json"))
+              :data (json-encode `(("start"  (,stime . ,start))  
+                                   ("end"  (,etime . ,end))
+                                   ("summary" . ,smry)
+                                   ("location" . ,loc)
+                                   ("description" . ,desc)))
+              :params '((access_token . org-gcal--get-access-token)
+                        (key . org-gcal-client-secret)
+                        ("grant_type" . "authorization_code"))
+
+              :parser 'buffer-string
+              :success (function*
+                        (lambda (&key data &allow-other-keys)
+                          (message "I sent: %S" data)))))))
 
 (provide 'org-gcal)
 
