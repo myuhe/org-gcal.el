@@ -360,7 +360,6 @@ TO.  Instead an empty string is returned."
   (let ((plst (org-gcal--parse-date str)))
     (concat
      (format-time-string format
-                         ;;(if (< 11 (length str)) "%Y-%m-%d %a %H:%M" "%Y-%m-%d %a")
                          (seconds-to-time
                           (+ (if tz (car (current-time-zone)) 0)
                              (time-to-seconds
