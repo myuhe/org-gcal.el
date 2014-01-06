@@ -226,11 +226,19 @@ It returns the code provided by the service."
     (json-read)))
 
 (defun org-gcal--get-refresh-token ()
-  (plist-get org-gcal-token-plist ':refresh_token))
+  (if (file-exists-p org-gcal-token-file)
+      (progn
+      (with-current-buffer (find-file-noselect org-gcal-token-file)
+        (plist-get (read (buffer-string)) :refresh_token)))
+    (message "\"%s\" is not exists" org-gcal-token-file)))
 
 (defun org-gcal--get-access-token ()
-  (plist-get org-gcal-token-plist ':access_token))
-
+  (if (file-exists-p org-gcal-token-file)
+      (progn
+      (with-current-buffer (find-file-noselect org-gcal-token-file)
+        (plist-get (read (buffer-string)) :access_token)))
+    (message "\"%s\" is not exists" org-gcal-token-file)))
+    
 (defun org-gcal--safe-substring (string from &optional to)
   "Calls the `substring' function safely.
 \nNo errors will be returned for out of range values of FROM and
