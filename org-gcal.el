@@ -55,7 +55,7 @@
   :type 'integer)
 
 (defcustom org-gcal-token-file
-  (concat user-emacs-directory ".org-gcal-token")
+  (expand-file-name ".org-gcal-token" user-emacs-directory)
   "File in which to save token."
   :group 'org-gcal
   :type 'string)
@@ -76,7 +76,7 @@
   :group 'org-gcal
   :type '(repeat (list :tag "Calendar file" (string :tag "Calendar Id") (file :tag "Org file"))))
 
-(defconst org-gcal-token-plist nil
+(defvar org-gcal-token-plist nil
   "token plist")
 
 (defconst org-gcal-auth-url "https://accounts.google.com/o/oauth2/auth"
@@ -103,23 +103,23 @@
                (request-deferred
                 (format org-gcal-events-url (car x))
                 :type "GET"        
-                :params '((access_token . org-gcal--get-access-token)
-                          (key . org-gcal-client-secret)
+                :params `((access_token . ,(org-gcal--get-access-token))
+                          (key . ,org-gcal-client-secret)
                           (singleEvents . "True")
-                          (timeMin . org-gcal--subsract-time)
-                          (timeMax . org-gcal--add-time)
+                          (timeMin . ,(org-gcal--subsract-time))
+                          (timeMax . ,(org-gcal--add-time))
                           ("grant_type" . "authorization_code"))
                 :parser 'org-gcal--json-read)
                (deferred:nextc it
                  (lambda (response)
-                   (setq temp (request-response-data response))
-                   (write-region
-                    (mapconcat 'identity
-                               (mapcar (lambda (lst) 
-                                         (org-gcal--cons-list lst))
-                                       (plist-get (request-response-data response) :items ))
-                               "") 
-                    nil (cdr x))))))))
+                   (let ((temp (request-response-data response)))
+                     (write-region
+                      (mapconcat 'identity
+                                 (mapcar (lambda (lst) 
+                                           (org-gcal--cons-list lst))
+                                         (plist-get (request-response-data response) :items ))
+                                 "")
+                      nil (cdr x)))))))))
 
 (defun org-gcal-post-at-point ()
   (interactive)
@@ -172,9 +172,9 @@ It returns the code provided by the service."
   (request 
    org-gcal-token-url
    :type "POST"        
-   :data '(("client_id" . org-gcal-client-id)
-           ("client_secret" . org-gcal-client-secret)
-           ("code" . org-gcal-request-authorization)
+   :data `(("client_id" . ,org-gcal-client-id)
+           ("client_secret" . ,org-gcal-client-secret)
+           ("code" . ,(org-gcal-request-authorization))
            ("redirect_uri" .  "urn:ietf:wg:oauth:2.0:oob")
            ("grant_type" . "authorization_code"))
    :parser 'org-gcal--json-read
@@ -196,9 +196,9 @@ It returns the code provided by the service."
   (request 
    org-gcal-token-url
    :type "POST"        
-   :data '(("client_id" . org-gcal-client-id)
-           ("client_secret" . org-gcal-client-secret)
-           ("refresh_token" . org-gcal--get-refresh-token)
+   :data `(("client_id" . ,org-gcal-client-id)
+           ("client_secret" . ,org-gcal-client-secret)
+           ("refresh_token" . ,(org-gcal--get-refresh-token))
            ("grant_type" . "refresh_token"))
    :parser 'org-gcal--json-read
    :success (function* 
