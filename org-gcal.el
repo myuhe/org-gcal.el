@@ -180,10 +180,7 @@ It returns the code provided by the service."
              (lambda (&key data &allow-other-keys)
                (when data
                  (setq org-gcal-token-plist data)
-                 (with-current-buffer (get-buffer-create " *org-gcal-token*")
-                   (erase-buffer)
-                   (insert (pp data))
-                   (write-region (point-min) (point-max) org-gcal-token-file)))))
+                 (org-gcal--save-sexp data org-gcal-token-file))))
    :error
    (function* (lambda (&key error-thrown &allow-other-keys&rest _)
                 (message "Got error: %S" error-thrown)))))
@@ -205,15 +202,19 @@ It returns the code provided by the service."
                  (plist-put org-gcal-token-plist
                             ':access_token 
                             (plist-get data ':access_token))
-                 (with-current-buffer (get-buffer-create " *org-gcal-token*")
-                   (erase-buffer)
-                   (insert (pp org-gcal-token-plist))
-                   (write-region (point-min) (point-max) org-gcal-token-file)))))
+                 (org-gcal--save-sexp org-gcal-token-plist org-gcal-token-file))))
    :error
    (function* (lambda (&key error-thrown &allow-other-keys&rest _)
                 (message "Got error: %S" error-thrown)))))
 
 ;; Internal
+
+(defun org-gcal--save-sexp (data file)
+  (with-current-buffer (get-buffer-create " *org-gcal-token*")
+    (erase-buffer)
+    (insert (pp data))
+    (write-region (point-min) (point-max) file)
+    (kill-buffer (current-buffer))))
 
 (defun org-gcal--json-read ()
   (let ((json-object-type 'plist))
