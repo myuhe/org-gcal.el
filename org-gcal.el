@@ -401,8 +401,8 @@ TO.  Instead an empty string is returned."
                                    ("summary" . ,smry)
                                    ("location" . ,loc)
                                    ("description" . ,desc)))
-              :params '((access_token . org-gcal--get-access-token)
-                        (key . org-gcal-client-secret)
+              :params `((access_token . ,(org-gcal--get-access-token))
+                        (key . ,org-gcal-client-secret)
                         ("grant_type" . "authorization_code"))
 
               :parser 'buffer-string
