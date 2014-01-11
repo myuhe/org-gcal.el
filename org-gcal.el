@@ -94,8 +94,7 @@
 
 (defun org-gcal-fetch ()
   (interactive)
-  (unless org-gcal-token-plist 
-    (org-gcal-request-token))
+  (org-gcal--ensure-token)
   (cl-loop for x in org-gcal-file-alist
            do
            (lexical-let ((x x)) 
@@ -123,8 +122,7 @@
 
 (defun org-gcal-post-at-point ()
   (interactive)
-  (unless org-gcal-token-plist 
-    (org-gcal-request-token))
+  (org-gcal--ensure-token)
   (save-excursion
     (end-of-line)
     (re-search-backward org-heading-regexp)
@@ -383,8 +381,7 @@ TO.  Instead an empty string is returned."
   (if (< 11 (length str)) "dateTime" "date"))
 
 (defun org-gcal--post-event (start end smry loc desc &optional id)
-  (unless org-gcal-token-plist 
-    (org-gcal-request-token))
+  (org-gcal--ensure-token)
   (cl-loop for x in org-gcal-file-alist
            do
            (lexical-let ((stime (org-gcal--param-date start))
@@ -409,6 +406,19 @@ TO.  Instead an empty string is returned."
               :success (function*
                         (lambda (&key data &allow-other-keys)
                           (message "I sent: %S" data)))))))
+
+(defun org-gcal--ensure-token ()
+  (cond
+   (org-gcal-token-plist t)
+   ((and (file-exists-p org-gcal-token-file)
+         (ignore-errors
+           (setq org-gcal-token-plist 
+                 (with-temp-buffer
+                   (insert-file-contents org-gcal-token-file)
+                   (read (current-buffer))))))
+    t)
+   (t
+    (org-gcal-request-token))))
 
 (provide 'org-gcal)
 
