@@ -55,7 +55,7 @@
   :type 'integer)
 
 (defcustom org-gcal-token-file
-  (concat user-emacs-directory ".org-gcal-token")
+  (expand-file-name ".org-gcal-token" user-emacs-directory)
   "File in which to save token."
   :group 'org-gcal
   :type 'string)
@@ -76,7 +76,7 @@
   :group 'org-gcal
   :type '(repeat (list :tag "Calendar file" (string :tag "Calendar Id") (file :tag "Org file"))))
 
-(defconst org-gcal-token-plist nil
+(defvar org-gcal-token-plist nil
   "token plist")
 
 (defconst org-gcal-auth-url "https://accounts.google.com/o/oauth2/auth"
@@ -94,8 +94,7 @@
 
 (defun org-gcal-fetch ()
   (interactive)
-  (unless org-gcal-token-plist 
-    (org-gcal-refresh-token))
+  (org-gcal--ensure-token)
   (cl-loop for x in org-gcal-file-alist
            do
            (lexical-let ((x x)) 
@@ -103,28 +102,27 @@
                (request-deferred
                 (format org-gcal-events-url (car x))
                 :type "GET"        
-                :params '((access_token . org-gcal--get-access-token)
-                          (key . org-gcal-client-secret)
+                :params `((access_token . ,(org-gcal--get-access-token))
+                          (key . ,org-gcal-client-secret)
                           (singleEvents . "True")
-                          (timeMin . org-gcal--subsract-time)
-                          (timeMax . org-gcal--add-time)
+                          (timeMin . ,(org-gcal--subsract-time))
+                          (timeMax . ,(org-gcal--add-time))
                           ("grant_type" . "authorization_code"))
                 :parser 'org-gcal--json-read)
                (deferred:nextc it
                  (lambda (response)
-                   (setq temp (request-response-data response))
-                   (write-region
-                    (mapconcat 'identity
-                               (mapcar (lambda (lst) 
-                                         (org-gcal--cons-list lst))
-                                       (plist-get (request-response-data response) :items ))
-                               "") 
-                    nil (cdr x))))))))
+                   (let ((temp (request-response-data response)))
+                     (write-region
+                      (mapconcat 'identity
+                                 (mapcar (lambda (lst) 
+                                           (org-gcal--cons-list lst))
+                                         (plist-get (request-response-data response) :items ))
+                                 "")
+                      nil (cdr x)))))))))
 
 (defun org-gcal-post-at-point ()
   (interactive)
-  (unless org-gcal-token-plist 
-    (org-gcal-refresh-token))
+  (org-gcal--ensure-token)
   (save-excursion
     (end-of-line)
     (re-search-backward org-heading-regexp)
@@ -172,9 +170,9 @@ It returns the code provided by the service."
   (request 
    org-gcal-token-url
    :type "POST"        
-   :data '(("client_id" . org-gcal-client-id)
-           ("client_secret" . org-gcal-client-secret)
-           ("code" . org-gcal-request-authorization)
+   :data `(("client_id" . ,org-gcal-client-id)
+           ("client_secret" . ,org-gcal-client-secret)
+           ("code" . ,(org-gcal-request-authorization))
            ("redirect_uri" .  "urn:ietf:wg:oauth:2.0:oob")
            ("grant_type" . "authorization_code"))
    :parser 'org-gcal--json-read
@@ -182,10 +180,7 @@ It returns the code provided by the service."
              (lambda (&key data &allow-other-keys)
                (when data
                  (setq org-gcal-token-plist data)
-                 (with-current-buffer (get-buffer-create " *org-gcal-token*")
-                   (erase-buffer)
-                   (insert (pp data))
-                   (write-region (point-min) (point-max) org-gcal-token-file)))))
+                 (org-gcal--save-sexp data org-gcal-token-file))))
    :error
    (function* (lambda (&key error-thrown &allow-other-keys&rest _)
                 (message "Got error: %S" error-thrown)))))
@@ -196,9 +191,9 @@ It returns the code provided by the service."
   (request 
    org-gcal-token-url
    :type "POST"        
-   :data '(("client_id" . org-gcal-client-id)
-           ("client_secret" . org-gcal-client-secret)
-           ("refresh_token" . org-gcal--get-refresh-token)
+   :data `(("client_id" . ,org-gcal-client-id)
+           ("client_secret" . ,org-gcal-client-secret)
+           ("refresh_token" . ,(org-gcal--get-refresh-token))
            ("grant_type" . "refresh_token"))
    :parser 'org-gcal--json-read
    :success (function* 
@@ -207,15 +202,19 @@ It returns the code provided by the service."
                  (plist-put org-gcal-token-plist
                             ':access_token 
                             (plist-get data ':access_token))
-                 (with-current-buffer (get-buffer-create " *org-gcal-token*")
-                   (erase-buffer)
-                   (insert (pp org-gcal-token-plist))
-                   (write-region (point-min) (point-max) org-gcal-token-file)))))
+                 (org-gcal--save-sexp org-gcal-token-plist org-gcal-token-file))))
    :error
    (function* (lambda (&key error-thrown &allow-other-keys&rest _)
                 (message "Got error: %S" error-thrown)))))
 
 ;; Internal
+
+(defun org-gcal--save-sexp (data file)
+  (with-current-buffer (get-buffer-create " *org-gcal-token*")
+    (erase-buffer)
+    (insert (pp data))
+    (write-region (point-min) (point-max) file)
+    (kill-buffer (current-buffer))))
 
 (defun org-gcal--json-read ()
   (let ((json-object-type 'plist))
@@ -383,8 +382,7 @@ TO.  Instead an empty string is returned."
   (if (< 11 (length str)) "dateTime" "date"))
 
 (defun org-gcal--post-event (start end smry loc desc &optional id)
-  (unless org-gcal-token-plist 
-    (org-gcal-request-token))
+  (org-gcal--ensure-token)
   (cl-loop for x in org-gcal-file-alist
            do
            (lexical-let ((stime (org-gcal--param-date start))
@@ -401,14 +399,27 @@ TO.  Instead an empty string is returned."
                                    ("summary" . ,smry)
                                    ("location" . ,loc)
                                    ("description" . ,desc)))
-              :params '((access_token . org-gcal--get-access-token)
-                        (key . org-gcal-client-secret)
+              :params `((access_token . ,(org-gcal--get-access-token))
+                        (key . ,org-gcal-client-secret)
                         ("grant_type" . "authorization_code"))
 
               :parser 'buffer-string
               :success (function*
                         (lambda (&key data &allow-other-keys)
                           (message "I sent: %S" data)))))))
+
+(defun org-gcal--ensure-token ()
+  (cond
+   (org-gcal-token-plist t)
+   ((and (file-exists-p org-gcal-token-file)
+         (ignore-errors
+           (setq org-gcal-token-plist 
+                 (with-temp-buffer
+                   (insert-file-contents org-gcal-token-file)
+                   (read (current-buffer))))))
+    t)
+   (t
+    (org-gcal-request-token))))
 
 (provide 'org-gcal)
 
