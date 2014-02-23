@@ -95,7 +95,7 @@
 (defun org-gcal-fetch ()
   (interactive)
   (unless org-gcal-token-plist 
-    (org-gcal-request-token))
+    (org-gcal-refresh-token))
   (cl-loop for x in org-gcal-file-alist
            do
            (lexical-let ((x x)) 
@@ -124,7 +124,7 @@
 (defun org-gcal-post-at-point ()
   (interactive)
   (unless org-gcal-token-plist 
-    (org-gcal-request-token))
+    (org-gcal-refresh-token))
   (save-excursion
     (end-of-line)
     (re-search-backward org-heading-regexp)
