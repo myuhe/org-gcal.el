@@ -95,6 +95,7 @@
 (defun org-gcal-fetch ()
   (interactive)
   (org-gcal--ensure-token)
+  (org-gcal-refresh-token)
   (cl-loop for x in org-gcal-file-alist
            do
            (lexical-let ((x x)) 
@@ -120,6 +121,30 @@
                                  "")
                       nil (cdr x)))))))))
 
+(defun org-gcal-fetch-test ()
+  (interactive)
+  (cl-loop for x in org-gcal-file-alist
+           do
+           (lexical-let ((x x))
+             (deferred:$
+               (request-deferred
+                (format org-gcal-events-url (car x))
+                :type "GET"
+                :params `((access_token . ,(org-gcal--get-access-token))
+                          (key . ,org-gcal-client-secret)
+                          (singleEvents . "True")
+                          (timeMin . ,(org-gcal--subsract-time))
+                          (timeMax . ,(org-gcal--add-time))
+                          ("grant_type" . "authorization_code"))
+                :parser 'buffer-string)
+               (deferred:nextc it
+                 (lambda (response)
+                   (let ((temp (request-response-data response)))
+                     (with-current-buffer (get-buffer-create "*request demo*")
+                       (erase-buffer)
+                       (insert (request-response-data response))
+                       (pop-to-buffer (current-buffer))))))))))
+
 (defun org-gcal-post-at-point ()
   (interactive)
   (org-gcal--ensure-token)
@@ -128,13 +153,11 @@
     (re-search-backward org-heading-regexp)
     (re-search-forward "<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]")
     (backward-char 11)
-    (let* ((elem (org-element-at-point))
+    (let* ((elem (org-element-headline-parser nil t))
            (tobj (org-element-timestamp-parser))
-           (smry (replace-regexp-in-string 
-                  "\s?<.*$" ""
-                  (car (org-element-map elem 'headline (lambda (hl) (org-element-property :raw-value hl))))))
-           (loc  (car (org-element-map elem 'headline (lambda (hl) (org-element-property :LOCATION hl)))))
-           (id  (car (org-element-map elem 'headline (lambda (hl) (org-element-property :ID hl)))))
+           (smry (org-element-property :title elem))
+           (loc  (org-element-property :LOCATION elem))
+           (id  (org-element-property :ID elem))
            (start (org-gcal--format-org2iso
                    (plist-get (cadr tobj) :year-start)
                    (plist-get (cadr tobj) :month-start)
@@ -147,11 +170,12 @@
                  (plist-get (cadr tobj) :day-end)
                  (plist-get (cadr tobj) :hour-end)
                  (plist-get (cadr tobj) :minute-end)))
-           (desc (replace-regexp-in-string
-                  "\n  :PROPERTIES:\n .:LOCATION:.*\n  :LINK:.*\n  :ID:.*\n  :END:\n" ""
+           (desc  (if (plist-get (cadr elem) :contents-begin)
+            (replace-regexp-in-string
+                  " *:PROPERTIES:\n  \\(.*\\(?:\n.*\\)*?\\) :END:\n" ""
                   (buffer-substring-no-properties
                    (plist-get (cadr elem) :contents-begin)
-                   (plist-get (cadr elem) :contents-end)))))
+                   (plist-get (cadr elem) :contents-end))) "")))
       (org-gcal--post-event start end smry loc desc id))))
 
 (defun org-gcal-request-authorization ()
@@ -210,11 +234,13 @@ It returns the code provided by the service."
 ;; Internal
 
 (defun org-gcal--save-sexp (data file)
-  (with-current-buffer (get-buffer-create " *org-gcal-token*")
-    (erase-buffer)
-    (insert (pp data))
-    (write-region (point-min) (point-max) file)
-    (kill-buffer (current-buffer))))
+  (let ((buf (get-buffer-create " *org-gcal-token*")))
+    (with-current-buffer buf
+      (erase-buffer)
+      (insert (pp data))
+      (write-region (point-min) (point-max) file))
+    (kill-buffer buf)
+    (kill-buffer file)))
 
 (defun org-gcal--json-read ()
   (let ((json-object-type 'plist))
@@ -227,14 +253,14 @@ It returns the code provided by the service."
 (defun org-gcal--get-refresh-token ()
   (if (file-exists-p org-gcal-token-file)
       (progn
-      (with-current-buffer (find-file-noselect org-gcal-token-file)
+      (with-temp-buffer (insert-file-contents org-gcal-token-file)
         (plist-get (read (buffer-string)) :refresh_token)))
     (message "\"%s\" is not exists" org-gcal-token-file)))
 
 (defun org-gcal--get-access-token ()
   (if (file-exists-p org-gcal-token-file)
       (progn
-      (with-current-buffer (find-file-noselect org-gcal-token-file)
+      (with-temp-buffer (insert-file-contents org-gcal-token-file)
         (plist-get (read (buffer-string)) :access_token)))
     (message "\"%s\" is not exists" org-gcal-token-file)))
     
@@ -313,15 +339,15 @@ TO.  Instead an empty string is returned."
    (format-time-string 
     (if (or hour min) "%Y-%m-%dT%H:%M" "%Y-%m-%d")
     (seconds-to-time
+     (-
      (time-to-seconds
       (encode-time 0 
                    (if min min 0)
                    (if hour hour 0)
-                   day mon year))))
-   (if (or hour min) (format "+%02d:00" (/ (car (current-time-zone)) 3600)))))
+                   day mon year)) (car (current-time-zone)))))
+   (when (or hour min) ":00z")))
 
 (defun org-gcal--cons-list (plst)
-
   (let* ((smry  (plist-get plst :summary))
          (desc  (plist-get plst :description))
          (loc   (plist-get plst :location))
@@ -339,29 +365,29 @@ TO.  Instead an empty string is returned."
          (end   (if etime etime eday)))
     (concat
      "* " smry 
-     " " (if (org-gcal--alldayp start end)
-             (org-gcal--format-iso2org start)
-           (if (and
-                (= (plist-get (org-gcal--parse-date start) :year) 
-                   (plist-get (org-gcal--parse-date end) :year))
-                (= (plist-get (org-gcal--parse-date start) :mon) 
-                   (plist-get (org-gcal--parse-date end) :mon))
-                (= (plist-get (org-gcal--parse-date start) :day) 
-                   (plist-get (org-gcal--parse-date end) :day)))
-               (concat "<"
-                       (org-gcal--format-date start "%Y-%m-%d %a %H:%M")
-                       "-"
-                       (org-gcal--format-date end "%H:%M")
-                       ">")
-             (concat (org-gcal--format-iso2org start)
-                     "--"
-                     (org-gcal--format-iso2org end)))) "\n\n"
-                     desc (when desc "\n")
-                     "  :PROPERTIES:\n"
-                     "  :LOCATION: " loc "\n"
-                     "  :LINK: ""[[" link "][Go to gcal web page]]\n"
-                     "  :ID: " id "\n"
-                     "  :END:\n\n")))
+     (if (org-gcal--alldayp start end)
+         (concat "\n  "(org-gcal--format-iso2org start))
+       (if (and
+            (= (plist-get (org-gcal--parse-date start) :year)
+               (plist-get (org-gcal--parse-date end)   :year))
+            (= (plist-get (org-gcal--parse-date start) :mon)
+               (plist-get (org-gcal--parse-date end)   :mon))
+            (= (plist-get (org-gcal--parse-date start) :day)
+               (plist-get (org-gcal--parse-date end)   :day)))
+           (concat "\n  <"
+                   (org-gcal--format-date start "%Y-%m-%d %a %H:%M")
+                   "-"
+                   (org-gcal--format-date end "%H:%M")
+                   ">")
+         (concat "\n  " (org-gcal--format-iso2org start)
+                 "--"
+                 (org-gcal--format-iso2org end)))) "\n\n"
+                 desc (when desc "\n")
+                 "  :PROPERTIES:\n"
+                 "  :LOCATION: " loc "\n"
+                 "  :LINK: ""[[" link "][Go to gcal web page]]\n"
+                 "  :ID: " id "\n"
+                 "  :END:\n\n")))
 
 (defun org-gcal--format-date (str format &optional tz) 
   (let ((plst (org-gcal--parse-date str)))
@@ -383,13 +409,11 @@ TO.  Instead an empty string is returned."
 
 (defun org-gcal--post-event (start end smry loc desc &optional id)
   (org-gcal--ensure-token)
-  (cl-loop for x in org-gcal-file-alist
-           do
            (lexical-let ((stime (org-gcal--param-date start))
                          (etime (org-gcal--param-date end)))
              (request
               (concat
-               (format org-gcal-events-url (car x)) 
+               (format org-gcal-events-url (car (car org-gcal-file-alist)))
                (when id 
                  (concat "/" id)))
               :type (if id "PATCH" "POST")
@@ -406,7 +430,7 @@ TO.  Instead an empty string is returned."
               :parser 'buffer-string
               :success (function*
                         (lambda (&key data &allow-other-keys)
-                          (message "I sent: %S" data)))))))
+                          (message "I sent: %S" data))))))
 
 (defun org-gcal--ensure-token ()
   (cond
