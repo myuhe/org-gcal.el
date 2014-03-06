@@ -37,6 +37,7 @@
 (require 'json)
 (require 'request-deferred)
 (require 'org-element)
+(require 'org-archive)
 (require 'cl-lib)
 
 ;; Customization
@@ -53,6 +54,11 @@
   "Number of days to get events after today"
   :group 'org-gcal
   :type 'integer)
+
+(defcustom org-gcal-auto-archive t
+  "If non-nil, old events archive automatically."
+  :group 'org-gcal
+  :type 'boolean)
 
 (defcustom org-gcal-token-file
   (expand-file-name ".org-gcal-token" user-emacs-directory)
@@ -95,7 +101,12 @@
 (defun org-gcal-fetch ()
   (interactive)
   (org-gcal--ensure-token)
-  (org-gcal-refresh-token)
+  (when org-gcal-auto-archive
+    (dolist (i org-gcal-file-alist)
+      (with-current-buffer
+          (find-file-noselect (cdr i))
+        (org-gcal--archive-old-event))
+      (kill-buffer (get-file-buffer (cdr i)))))
   (cl-loop for x in org-gcal-file-alist
            do
            (lexical-let ((x x)) 
@@ -232,6 +243,20 @@ It returns the code provided by the service."
                 (message "Got error: %S" error-thrown)))))
 
 ;; Internal
+(defun org-gcal--archive-old-event ()
+  (goto-char (point-min))
+  (while (re-search-forward org-heading-regexp nil t)
+  (goto-char (cdr (org-element-timestamp-successor)))
+  (when (>
+    (time-to-seconds (time-subtract (current-time) (days-to-time org-gcal-up-days)))
+    (time-to-seconds (encode-time 0  (if (plist-get (cadr (org-element-timestamp-parser)) :minute-start)
+                    (plist-get (cadr (org-element-timestamp-parser)) :minute-start) 0)
+             (if (plist-get (cadr (org-element-timestamp-parser)) :hour-start)
+                 (plist-get (cadr (org-element-timestamp-parser)) :hour-start) 0)
+                   (plist-get (cadr (org-element-timestamp-parser)) :day-start)
+                   (plist-get (cadr (org-element-timestamp-parser)) :month-start)
+                   (plist-get (cadr (org-element-timestamp-parser)) :year-start))))
+      (org-advertized-archive-subtree))))
 
 (defun org-gcal--save-sexp (data file)
   (let ((buf (get-buffer-create " *org-gcal-token*")))
