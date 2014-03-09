@@ -1,16 +1,19 @@
 * What is org-gcal ?
- =org-gcal= offers \\
+ =org-gcal= offers
   - Fetch google calendar event
   - Post/edit org element
 
 * Requirement
-  [[https://github.com/tkf/emacs-request][tkf/emacs-request]] \\
-  [[https://github.com/tekai/gntp.el][tekai/gntp.el]] \\
+  [[https://github.com/tkf/emacs-request][tkf/emacs-request]]
+
+  [[https://github.com/tekai/gntp.el][tekai/gntp.el]]
 
   org-gcal is now available in the famous emacs package repo melpa, so the recommended way is to install it through emacs package management system.
 * Installation
-  Go to [[https://console.developers.google.com/project][Google Developers Console]] to create project, and get client ID, client secret.\\
+  Go to [[https://console.developers.google.com/project][Google Developers Console]] to create project, and get client ID, client secret.
+
   Go to [[https://www.google.com/calendar/render][Google setting page]] to check calendar ID.
+
 ** Setting example
 
 #+BEGIN_EXAMPLE
@@ -24,18 +27,6 @@
 
 #+END_EXAMPLE
 
-#+begin_src lisp
-
-(require 'org-gcal)
-(setq 
- org-gcal-client-id "your-id-foo.apps.googleusercontent.com"
- org-gcal-client-secret "your-secret"
- org-gcal-file-alist '(("your-mail@gmail.com" .  "~/schedule.org")
-                       ("another-mail@gmail.com" .  "~/task.org")))
-
-#+end_src
-
-   
 * Usage
 ** org-gcal-fetch
    Fetch google calendar event.
