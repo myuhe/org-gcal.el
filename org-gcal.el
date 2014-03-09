@@ -6,7 +6,7 @@
 ;; Maintainer: myuhe
 ;; Copyright (C) :2014 myuhe all rights reserved.
 ;; Created: :14-01-03
-;; Package-Requires: ((request "0.2.0"))
+;; Package-Requires: ((request "0.2.0") (gntp "0.1"))
 ;; Keywords: convenience, 
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -38,6 +38,7 @@
 (require 'request-deferred)
 (require 'org-element)
 (require 'org-archive)
+(require 'gntp)
 (require 'cl-lib)
 
 ;; Customization
@@ -60,8 +61,14 @@
   :group 'org-gcal
   :type 'boolean)
 
+(defcustom org-gcal-dir
+  (concat user-emacs-directory "org-gcal/")
+  "File in which to save token."
+  :group 'org-gcal
+  :type 'string)
+
 (defcustom org-gcal-token-file
-  (expand-file-name ".org-gcal-token" user-emacs-directory)
+  (expand-file-name ".org-gcal-token" org-gcal-dir)
   "File in which to save token."
   :group 'org-gcal
   :type 'string)
@@ -81,6 +88,16 @@
    for calendar id."
   :group 'org-gcal
   :type '(repeat (list :tag "Calendar file" (string :tag "Calendar Id") (file :tag "Org file"))))
+
+(defcustom org-gcal-use-notifications nil
+  "If non-nil notify via `notifications-notify' instead of `gntp-notify'."
+  :group 'org-gcal
+  :type 'boolean)
+
+(defcustom org-gcal-logo "http://raw.github.com/myuhe/org-gcal.el/master/org-gcal-logo.png"
+  "org-gcal logo filename or URL."
+  :group 'org-gcal
+  :type 'string)
 
 (defvar org-gcal-token-plist nil
   "token plist")
@@ -124,6 +141,7 @@
                (deferred:nextc it
                  (lambda (response)
                    (let ((temp (request-response-data response)))
+                     (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n\" (cdr x)) org-gcal-logo)
                      (write-region
                       (mapconcat 'identity
                                  (mapcar (lambda (lst) 
@@ -259,13 +277,18 @@ It returns the code provided by the service."
       (org-advertized-archive-subtree))))
 
 (defun org-gcal--save-sexp (data file)
-  (let ((buf (get-buffer-create " *org-gcal-token*")))
-    (with-current-buffer buf
-      (erase-buffer)
-      (insert (pp data))
-      (write-region (point-min) (point-max) file))
-    (kill-buffer buf)
-    (kill-buffer file)))
+  (if (file-directory-p org-gcal-dir)
+      (if (file-exists-p file)
+        (with-temp-file file
+          (insert (pp data)))
+        (progn
+          (find-file-noselect file)
+          (with-temp-file file
+            (insert (pp data)))
+          (kill-buffer (get-file-buffer file))))
+    (progn
+      (make-directory org-gcal-dir)
+      (org-gcal--save-sexp data file))))
 
 (defun org-gcal--json-read ()
   (let ((json-object-type 'plist))
@@ -280,7 +303,7 @@ It returns the code provided by the service."
       (progn
       (with-temp-buffer (insert-file-contents org-gcal-token-file)
         (plist-get (read (buffer-string)) :refresh_token)))
-    (message "\"%s\" is not exists" org-gcal-token-file)))
+         (message "\"%s\" is not exists" org-gcal-token-file)))
 
 (defun org-gcal--get-access-token ()
   (if (file-exists-p org-gcal-token-file)
@@ -364,12 +387,11 @@ TO.  Instead an empty string is returned."
    (format-time-string 
     (if (or hour min) "%Y-%m-%dT%H:%M" "%Y-%m-%d")
     (seconds-to-time
-     (-
      (time-to-seconds
       (encode-time 0 
                    (if min min 0)
                    (if hour hour 0)
-                   day mon year)) (car (current-time-zone)))))
+                   day mon year))))
    (when (or hour min) ":00z")))
 
 (defun org-gcal--cons-list (plst)
@@ -452,10 +474,13 @@ TO.  Instead an empty string is returned."
                         (key . ,org-gcal-client-secret)
                         ("grant_type" . "authorization_code"))
 
-              :parser 'buffer-string
+              :parser 'org-gcal--json-read
               :success (function*
                         (lambda (&key data &allow-other-keys)
-                          (message "I sent: %S" data))))))
+                           (message "I sent: %S" data)
+                          (org-gcal--notify "Event Posted"
+                                            (concat "Org-gcal post event\n  " (plist-get data :summary))
+                                            org-gcal-logo))))))
 
 (defun org-gcal--ensure-token ()
   (cond
@@ -470,6 +495,11 @@ TO.  Instead an empty string is returned."
    (t
     (org-gcal-request-token))))
 
+(defun org-gcal--notify (title mes &optional icn)
+  (if org-gcal-use-notifications
+      (notifications-notify :title title
+                            :body mes)
+    (gntp-notify 'org-gcal title mes "localhost" nil icn)))
 (provide 'org-gcal)
 
 ;;; org-gcal.el ends here
