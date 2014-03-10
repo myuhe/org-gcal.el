@@ -455,32 +455,39 @@ TO.  Instead an empty string is returned."
   (if (< 11 (length str)) "dateTime" "date"))
 
 (defun org-gcal--post-event (start end smry loc desc &optional id)
-  (org-gcal--ensure-token)
-           (lexical-let ((stime (org-gcal--param-date start))
-                         (etime (org-gcal--param-date end)))
-             (request
-              (concat
-               (format org-gcal-events-url (car (car org-gcal-file-alist)))
-               (when id 
-                 (concat "/" id)))
-              :type (if id "PATCH" "POST")
-              :headers '(("Content-Type" . "application/json"))
-              :data (json-encode `(("start"  (,stime . ,start))  
-                                   ("end"  (,etime . ,end))
-                                   ("summary" . ,smry)
-                                   ("location" . ,loc)
-                                   ("description" . ,desc)))
-              :params `((access_token . ,(org-gcal--get-access-token))
-                        (key . ,org-gcal-client-secret)
-                        ("grant_type" . "authorization_code"))
+  (lexical-let ((stime (org-gcal--param-date start))
+                (etime (org-gcal--param-date end)))
+    (request
+     (concat
+      (format org-gcal-events-url (car (car org-gcal-file-alist)))
+      (when id
+        (concat "/" id)))
+     :type (if id "PATCH" "POST")
+     :headers '(("Content-Type" . "application/json"))
+     :data (json-encode `(("start"  (,stime . ,start))
+                          ("end"  (,etime . ,end))
+                          ("summary" . ,smry)
+                          ("location" . ,loc)
+                          ("description" . ,desc)))
+     :params `((access_token . ,(org-gcal--get-access-token))
+               (key . ,org-gcal-client-secret)
+               ("grant_type" . "authorization_code"))
 
-              :parser 'org-gcal--json-read
-              :success (function*
-                        (lambda (&key data &allow-other-keys)
-                           (message "I sent: %S" data)
-                          (org-gcal--notify "Event Posted"
-                                            (concat "Org-gcal post event\n  " (plist-get data :summary))
-                                            org-gcal-logo))))))
+     :parser 'org-gcal--json-read
+     :success (function*
+               (lambda (&key data &allow-other-keys)
+                 (message "I sent: %S" data)
+                 (org-gcal--notify "Event Posted"
+                                   (concat "Org-gcal post event\n  " (plist-get data :summary))
+                                   org-gcal-logo))))))
+
+(defun org-gcal--capture-post ()
+  (dolist (i org-gcal-file-alist)
+    (when (string=  (file-name-nondirectory (cdr i))
+                  (substring (buffer-name) 8))
+      (org-gcal-post-at-point))))
+
+(add-hook 'org-capture-before-finalize-hook 'org-gcal--capture-post)
 
 (defun org-gcal--ensure-token ()
   (cond
