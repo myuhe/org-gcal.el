@@ -90,7 +90,12 @@
   :type '(repeat (list :tag "Calendar file" (string :tag "Calendar Id") (file :tag "Org file"))))
 
 (defcustom org-gcal-use-notifications nil
-  "If non-nil notify via `notifications-notify' instead of `gntp-notify'."
+  "If non-nil notify via `notifications-notify'."
+  :group 'org-gcal
+  :type 'boolean)
+
+(defcustom org-gcal-use-gntp nil
+  "If non-nil notify via `gntp-notify'."
   :group 'org-gcal
   :type 'boolean)
 
@@ -509,10 +514,12 @@ TO.  Instead an empty string is returned."
     (org-gcal-request-token))))
 
 (defun org-gcal--notify (title mes &optional icn)
-  (if org-gcal-use-notifications
+(cond
+ (org-gcal-use-gntp
+  (gntp-notify 'org-gcal title mes "localhost" nil icn))
+  (org-gcal-use-notifications
       (notifications-notify :title title
-                            :body mes)
-    (gntp-notify 'org-gcal title mes "localhost" nil icn)))
+                            :body mes))))
 (provide 'org-gcal)
 
 ;;; org-gcal.el ends here
