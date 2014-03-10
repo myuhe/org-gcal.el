@@ -141,7 +141,7 @@
                (deferred:nextc it
                  (lambda (response)
                    (let ((temp (request-response-data response)))
-                     (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n\" (cdr x)) org-gcal-logo)
+                     (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n" (cdr x)) org-gcal-logo)
                      (write-region
                       (mapconcat 'identity
                                  (mapcar (lambda (lst) 
@@ -152,6 +152,7 @@
 
 (defun org-gcal-fetch-test ()
   (interactive)
+  (org-gcal--ensure-token)
   (cl-loop for x in org-gcal-file-alist
            do
            (lexical-let ((x x))
@@ -192,13 +193,15 @@
                    (plist-get (cadr tobj) :month-start)
                    (plist-get (cadr tobj) :day-start)
                    (plist-get (cadr tobj) :hour-start)
-                   (plist-get (cadr tobj) :minute-start)))
+                   (plist-get (cadr tobj) :minute-start)
+                   t))
            (end (org-gcal--format-org2iso
                  (plist-get (cadr tobj) :year-end)
                  (plist-get (cadr tobj) :month-end)
                  (plist-get (cadr tobj) :day-end)
                  (plist-get (cadr tobj) :hour-end)
-                 (plist-get (cadr tobj) :minute-end)))
+                 (plist-get (cadr tobj) :minute-end)
+                 t))
            (desc  (if (plist-get (cadr elem) :contents-begin)
             (replace-regexp-in-string
                   " *:PROPERTIES:\n  \\(.*\\(?:\n.*\\)*?\\) :END:\n" ""
@@ -382,16 +385,19 @@ TO.  Instead an empty string is returned."
      ;;(if (and repeat (not (string= repeat ""))) (concat " " repeat) "")
      ">")))
 
-(defun org-gcal--format-org2iso (year mon day &optional hour min) 
+(defun org-gcal--format-org2iso (year mon day &optional hour min tz)
   (concat
    (format-time-string 
     (if (or hour min) "%Y-%m-%dT%H:%M" "%Y-%m-%d")
     (seconds-to-time
-     (time-to-seconds
-      (encode-time 0 
+     (-
+      (time-to-seconds
+       (encode-time 0
                    (if min min 0)
                    (if hour hour 0)
-                   day mon year))))
+                   day mon year))
+        (if tz
+            (car (current-time-zone)) 0))))
    (when (or hour min) ":00z")))
 
 (defun org-gcal--cons-list (plst)
@@ -412,7 +418,7 @@ TO.  Instead an empty string is returned."
          (end   (if etime etime eday)))
     (concat
      "* " smry 
-     (if (org-gcal--alldayp start end)
+     (if (string= start end)
          (concat "\n  "(org-gcal--format-iso2org start))
        (if (and
             (= (plist-get (org-gcal--parse-date start) :year)
