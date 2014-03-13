@@ -120,7 +120,7 @@
 
 (defconst org-gcal-events-url "https://www.googleapis.com/calendar/v3/calendars/%s/events")
 
-(defun org-gcal-fetch ()
+(defun org-gcal-fetch (&optional a-token)
   (interactive)
   (org-gcal--ensure-token)
   (when org-gcal-auto-archive
@@ -131,54 +131,43 @@
       (kill-buffer (get-file-buffer (cdr i)))))
   (cl-loop for x in org-gcal-file-alist
            do
-           (lexical-let ((x x)) 
+           (lexical-let ((x x)
+                         (a-token (if a-token
+                                    a-token
+                                  (org-gcal--get-access-token))))
              (deferred:$       
                (request-deferred
                 (format org-gcal-events-url (car x))
                 :type "GET"        
-                :params `((access_token . ,(org-gcal--get-access-token))
+                :params `((access_token . ,a-token)
                           (key . ,org-gcal-client-secret)
                           (singleEvents . "True")
                           (timeMin . ,(org-gcal--subsract-time))
                           (timeMax . ,(org-gcal--add-time))
                           ("grant_type" . "authorization_code"))
-                :parser 'org-gcal--json-read)
+                :parser 'org-gcal--json-read
+                :error
+                (function* (lambda (&key error-thrown &allow-other-keys&rest _)
+                             (message "Got error: %S" error-thrown))))
                (deferred:nextc it
                  (lambda (response)
                    (let ((temp (request-response-data response)))
-                     (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n" (cdr x)) org-gcal-logo)
-                     (write-region
-                      (mapconcat 'identity
-                                 (mapcar (lambda (lst) 
-                                           (org-gcal--cons-list lst))
-                                         (plist-get (request-response-data response) :items ))
-                                 "")
-                      nil (cdr x)))))))))
-
-(defun org-gcal-fetch-test ()
-  (interactive)
-  (org-gcal--ensure-token)
-  (cl-loop for x in org-gcal-file-alist
-           do
-           (lexical-let ((x x))
-             (deferred:$
-               (request-deferred
-                (format org-gcal-events-url (car x))
-                :type "GET"
-                :params `((access_token . ,(org-gcal--get-access-token))
-                          (key . ,org-gcal-client-secret)
-                          (singleEvents . "True")
-                          (timeMin . ,(org-gcal--subsract-time))
-                          (timeMax . ,(org-gcal--add-time))
-                          ("grant_type" . "authorization_code"))
-                :parser 'buffer-string)
-               (deferred:nextc it
-                 (lambda (response)
-                   (let ((temp (request-response-data response)))
-                     (with-current-buffer (get-buffer-create "*request demo*")
-                       (erase-buffer)
-                       (insert (request-response-data response))
-                       (pop-to-buffer (current-buffer))))))))))
+                     (if (or (eq temp nil)
+                             (string=
+                              (plist-get (plist-get temp :error) :message)
+                              "Invalid Credentials"))
+                         (progn
+                           (org-gcal-refresh-token 'org-gcal-fetch)
+                           (message "I sent: %S" temp))
+                       (progn
+                         (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n" (cdr x)) org-gcal-logo)
+                         (write-region
+                          (mapconcat 'identity
+                                     (mapcar (lambda (lst)
+                                               (org-gcal--cons-list lst))
+                                             (plist-get (request-response-data response) :items ))
+                                     "")
+                          nil (cdr x) nil 'nomsg))))))))))
 
 (defun org-gcal-post-at-point ()
   (interactive)
@@ -199,14 +188,16 @@
                    (plist-get (cadr tobj) :day-start)
                    (plist-get (cadr tobj) :hour-start)
                    (plist-get (cadr tobj) :minute-start)
-                   t))
+                   (when (plist-get (cadr tobj) :hour-start)
+                     t)))
            (end (org-gcal--format-org2iso
                  (plist-get (cadr tobj) :year-end)
                  (plist-get (cadr tobj) :month-end)
                  (plist-get (cadr tobj) :day-end)
                  (plist-get (cadr tobj) :hour-end)
                  (plist-get (cadr tobj) :minute-end)
-                 t))
+                 (when (plist-get (cadr tobj) :hour-start)
+                   t)))
            (desc  (if (plist-get (cadr elem) :contents-begin)
             (replace-regexp-in-string
                   " *:PROPERTIES:\n  \\(.*\\(?:\n.*\\)*?\\) :END:\n" ""
@@ -246,54 +237,73 @@ It returns the code provided by the service."
    (function* (lambda (&key error-thrown &allow-other-keys&rest _)
                 (message "Got error: %S" error-thrown)))))
 
-(defun org-gcal-refresh-token ()
+(defun org-gcal-refresh-token (&optional fun start end smry loc desc id)
   "Refresh OAuth access at TOKEN-URL."
   (interactive)  
-  (request 
-   org-gcal-token-url
-   :type "POST"        
-   :data `(("client_id" . ,org-gcal-client-id)
-           ("client_secret" . ,org-gcal-client-secret)
-           ("refresh_token" . ,(org-gcal--get-refresh-token))
-           ("grant_type" . "refresh_token"))
-   :parser 'org-gcal--json-read
-   :success (function* 
-             (lambda (&key data &allow-other-keys)
-               (when data
-                 (plist-put org-gcal-token-plist
-                            ':access_token 
-                            (plist-get data ':access_token))
-                 (org-gcal--save-sexp org-gcal-token-plist org-gcal-token-file))))
-   :error
+  (lexical-let ((fun fun)
+                (start start)
+                (end end)
+                (smry smry)
+                (loc loc)
+                (desc desc)
+                (id id))
+  (deferred:$
+    (request-deferred
+     org-gcal-token-url
+     :type "POST"
+     :data `(("client_id" . ,org-gcal-client-id)
+             ("client_secret" . ,org-gcal-client-secret)
+             ("refresh_token" . ,(org-gcal--get-refresh-token))
+             ("grant_type" . "refresh_token"))
+     :parser 'org-gcal--json-read
+     :error
    (function* (lambda (&key error-thrown &allow-other-keys&rest _)
-                (message "Got error: %S" error-thrown)))))
+                (message "Got error: %S" error-thrown))))
+   (deferred:nextc it
+         (lambda (response)
+                   (let ((temp (request-response-data response)))
+                     (plist-put org-gcal-token-plist
+                              :access_token
+                              (plist-get temp :access_token))
+                   (org-gcal--save-sexp org-gcal-token-plist org-gcal-token-file)
+                   org-gcal-token-plist)))
+   (deferred:nextc it
+         (lambda (token)
+           (cond ((eq fun 'org-gcal-fetch)
+                  (org-gcal-fetch (plist-get token :access_token))
+                  (org-gcal--notify "Debug"  (plist-get token :access_token)))
+                 ((eq fun 'org-gcal--post-event)
+                  (org-gcal--post-event start end smry loc desc id (plist-get token :access_token)))))))))
 
 ;; Internal
 (defun org-gcal--archive-old-event ()
   (goto-char (point-min))
   (while (re-search-forward org-heading-regexp nil t)
   (goto-char (cdr (org-element-timestamp-successor)))
+  (let ((elem (org-element-headline-parser nil t))
+        (tobj (cadr (org-element-timestamp-parser))))
   (when (>
-    (time-to-seconds (time-subtract (current-time) (days-to-time org-gcal-up-days)))
-    (time-to-seconds (encode-time 0  (if (plist-get (cadr (org-element-timestamp-parser)) :minute-start)
-                    (plist-get (cadr (org-element-timestamp-parser)) :minute-start) 0)
-             (if (plist-get (cadr (org-element-timestamp-parser)) :hour-start)
-                 (plist-get (cadr (org-element-timestamp-parser)) :hour-start) 0)
-                   (plist-get (cadr (org-element-timestamp-parser)) :day-start)
-                   (plist-get (cadr (org-element-timestamp-parser)) :month-start)
-                   (plist-get (cadr (org-element-timestamp-parser)) :year-start))))
-      (org-advertized-archive-subtree))))
+         (time-to-seconds (time-subtract (current-time) (days-to-time org-gcal-up-days)))
+         (time-to-seconds (encode-time 0  (if (plist-get tobj :minute-start)
+                                              (plist-get tobj :minute-start) 0)
+                                       (if (plist-get tobj :hour-start)
+                                           (plist-get tobj :hour-start) 0)
+                                       (plist-get tobj :day-start)
+                                       (plist-get tobj :month-start)
+                                       (plist-get tobj :year-start))))
+    (org-gcal--notify "Archived event." (org-element-property :title elem)  org-gcal-logo)
+    (org-advertized-archive-subtree)))))
 
 (defun org-gcal--save-sexp (data file)
   (if (file-directory-p org-gcal-dir)
       (if (file-exists-p file)
-        (with-temp-file file
-          (insert (pp data)))
+          (progn
+            (with-temp-file file
+              (pp data (current-buffer))))
         (progn
           (find-file-noselect file)
           (with-temp-file file
-            (insert (pp data)))
-          (kill-buffer (get-file-buffer file))))
+            (pp data (current-buffer)))))
     (progn
       (make-directory org-gcal-dir)
       (org-gcal--save-sexp data file))))
@@ -307,18 +317,24 @@ It returns the code provided by the service."
     (json-read)))
 
 (defun org-gcal--get-refresh-token ()
-  (if (file-exists-p org-gcal-token-file)
-      (progn
-      (with-temp-buffer (insert-file-contents org-gcal-token-file)
-        (plist-get (read (buffer-string)) :refresh_token)))
-         (message "\"%s\" is not exists" org-gcal-token-file)))
+  (if org-gcal-token-plist
+      (plist-get org-gcal-token-plist :refresh_token)
+  (progn
+    (if (file-exists-p org-gcal-token-file)
+        (progn
+          (with-temp-buffer (insert-file-contents org-gcal-token-file)
+                            (plist-get (read (buffer-string)) :refresh_token)))
+      (message "\"%s\" is not exists" org-gcal-token-file)))))
 
 (defun org-gcal--get-access-token ()
-  (if (file-exists-p org-gcal-token-file)
-      (progn
-      (with-temp-buffer (insert-file-contents org-gcal-token-file)
-        (plist-get (read (buffer-string)) :access_token)))
-    (message "\"%s\" is not exists" org-gcal-token-file)))
+  (if org-gcal-token-plist
+      (plist-get org-gcal-token-plist :access_token)
+    (progn
+      (if (file-exists-p org-gcal-token-file)
+          (progn
+            (with-temp-buffer (insert-file-contents org-gcal-token-file)
+                              (plist-get (read (buffer-string)) :access_token)))
+        (message "\"%s\" is not exists" org-gcal-token-file)))))
     
 (defun org-gcal--safe-substring (string from &optional to)
   "Calls the `substring' function safely.
@@ -465,9 +481,12 @@ TO.  Instead an empty string is returned."
 (defun org-gcal--param-date (str)
   (if (< 11 (length str)) "dateTime" "date"))
 
-(defun org-gcal--post-event (start end smry loc desc &optional id)
+(defun org-gcal--post-event (start end smry loc desc &optional id a-token)
   (lexical-let ((stime (org-gcal--param-date start))
-                (etime (org-gcal--param-date end)))
+                (etime (org-gcal--param-date end))
+                (a-token (if a-token
+                           a-token
+                         (org-gcal--get-access-token))))
     (request
      (concat
       (format org-gcal-events-url (car (car org-gcal-file-alist)))
@@ -480,17 +499,24 @@ TO.  Instead an empty string is returned."
                           ("summary" . ,smry)
                           ("location" . ,loc)
                           ("description" . ,desc)))
-     :params `((access_token . ,(org-gcal--get-access-token))
+     :params `((access_token . ,a-token)
                (key . ,org-gcal-client-secret)
                ("grant_type" . "authorization_code"))
 
      :parser 'org-gcal--json-read
      :success (function*
                (lambda (&key data &allow-other-keys)
-                 (message "I sent: %S" data)
-                 (org-gcal--notify "Event Posted"
-                                   (concat "Org-gcal post event\n  " (plist-get data :summary))
-                                   org-gcal-logo))))))
+                 (if  (string=
+                       (plist-get (plist-get data :error) :message)
+                       "Invalid Credentials")
+                     (progn
+                       (org-gcal-refresh-token 'org-gcal--post-event)
+                       (message "I sent: %S" data))
+                   (progn
+                     (org-gcal--notify "Event Posted"
+                                       (concat "Org-gcal post event\n  " (plist-get data :summary))
+                                       org-gcal-logo)
+                     (org-gcal-fetch))))))))
 
 (defun org-gcal--capture-post ()
   (dolist (i org-gcal-file-alist)
@@ -519,7 +545,9 @@ TO.  Instead an empty string is returned."
   (gntp-notify 'org-gcal title mes "localhost" nil icn))
   (org-gcal-use-notifications
       (notifications-notify :title title
-                            :body mes))))
+                            :body mes))
+  (t (message (concat title ":  " mes)))))
+
 (provide 'org-gcal)
 
 ;;; org-gcal.el ends here
