@@ -6,7 +6,7 @@
 ;; Maintainer: myuhe
 ;; Copyright (C) :2014 myuhe all rights reserved.
 ;; Created: :14-01-03
-;; Package-Requires: ((request "0.2.0") (gntp "0.1"))
+;; Package-Requires: ((request-deferred "0.2.0") (gntp "0.1") (emacs "24") (cl-lib "1.0") (org "8.2.4"))
 ;; Keywords: convenience, 
 
 ;; This program is free software; you can redistribute it and/or modify
