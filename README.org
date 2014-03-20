@@ -3,37 +3,49 @@
   - Fetch google calendar event
   - Post/edit org element
 
-* Requirement
-  [[https://github.com/tkf/emacs-request][tkf/emacs-request]]
+* Requirements
+ 
+- [[https://github.com/tkf/emacs-request][tkf/emacs-request]]
+- [[https://github.com/tekai/gntp.el][tekai/gntp.el]]
 
-  [[https://github.com/tekai/gntp.el][tekai/gntp.el]]
+  =org-gcal= is now available in the famous emacs package repo [[http://melpa.milkbox.net/][MELPA]], so the recommended way is to install it through Emacs package management system.
 
-  org-gcal is now available in the famous emacs package repo melpa, so the recommended way is to install it through emacs package management system.
 * Installation
-  Go to [[https://console.developers.google.com/project][Google Developers Console]] to create project, and get client ID, client secret.
 
-  Go to [[https://www.google.com/calendar/render][Google setting page]] to check calendar ID.
+1. Go to [[https://console.developers.google.com/project][Google Developers Console]]
+
+2. Create a project (with any name)
+
+3. Click on the project
+
+4. Click on *APIs & Auth* then *Credentials*
+
+5. Click on *Create New Client ID* with Application type /Installed application/, Installed application type /Other/
+
+6. Click on *Create Client ID*
+
+7. Record the Client ID and Client secret for setup.
+
+   Go to [[https://www.google.com/calendar/render][Google setting page]] to check the calendar ID.
 
 ** Setting example
 
-#+BEGIN_EXAMPLE
-
+#+begin_src emacs-lisp
 (require 'org-gcal)
-(setq 
- org-gcal-client-id "your-id-foo.apps.googleusercontent.com"
- org-gcal-client-secret "your-secret"
- org-gcal-file-alist '(("your-mail@gmail.com" .  "~/schedule.org")
-                       ("another-mail@gmail.com" .  "~/task.org")))
+(setq org-gcal-client-id "your-id-foo.apps.googleusercontent.com"
+      org-gcal-client-secret "your-secret"
+      org-gcal-file-alist '(("your-mail@gmail.com" .  "~/schedule.org")
+                            ("another-mail@gmail.com" .  "~/task.org")))
+#+end_src
 
-#+END_EXAMPLE
 
 * Usage
-** org-gcal-fetch
-   Fetch google calendar event.
-** org-gcal-post-at-point
-   Post/edit org to Google calendar at point.
-** org-gcal-refresh-token
-   Refresh Oauth token. Oauth token expired in 3600 seconds, You should refresh token on a regular basis.
+** =org-gcal-fetch=
+   Fetch Google calendar events and populate =org-gcal-file-alist= locations.
+** =org-gcal-post-at-point=
+   Post/edit org block at point to Google calendar.
+** =org-gcal-refresh-token=
+   Refresh the OAuth token. OAuth token expired in 3600 seconds, You should refresh token on a regular basis.
 
 * Similar application
   [[https://github.com/dengste/org-caldav][dengste/org-caldav]]
