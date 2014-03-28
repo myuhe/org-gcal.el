@@ -154,10 +154,14 @@
                    (let*
                        ((temp (request-response-data response))
                         (status (request-response-status-code response))
-                        (error-msg (plist-get (plist-get temp :error) :message)))
-                     (cond ((eq temp nil)
-                            (not (eq error-msg nil))
-                            (> 299 status)
+                        (error-msg (request-response-error-thrown response)))
+                     (cond ((eq 403 status)
+                            (progn
+                              (message "Received HTTP 403. Ensure you enabled the Calendar API through the Developers Console, then try again.")
+                              (org-gcal-refresh-token)))
+                           ((and (> 299) (eq temp nil))
+                            (message "Received HTTP %d, but no message body."))
+                           ((not (eq error-msg nil))
                             (progn
                               (message "I sent: %S" temp)
                               (message "Status code: %d" status)
