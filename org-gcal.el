@@ -7,7 +7,7 @@
 ;; Copyright (C) :2014 myuhe all rights reserved.
 ;; Created: :14-01-03
 ;; Package-Requires: ((request-deferred "0.2.0") (gntp "0.1") (emacs "24") (cl-lib "0.5") (org "8.2.4"))
-;; Keywords: convenience, 
+;; Keywords: convenience,
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published byn
@@ -32,7 +32,7 @@
 ;; (require 'org-gcal)
 ;;
 ;;; Changelog:
-;; 2014-01-03 Initial release. 
+;; 2014-01-03 Initial release.
 
 (require 'json)
 (require 'request-deferred)
@@ -79,7 +79,7 @@
   :type 'string)
 
 (defcustom org-gcal-client-secret nil
-  "Google calendar secret key for OAuth."  
+  "Google calendar secret key for OAuth."
   :group 'org-gcal
   :type 'string)
 
@@ -135,10 +135,10 @@
                          (a-token (if a-token
                                     a-token
                                   (org-gcal--get-access-token))))
-             (deferred:$       
+             (deferred:$
                (request-deferred
                 (format org-gcal-events-url (car x))
-                :type "GET"        
+                :type "GET"
                 :params `((access_token . ,a-token)
                           (key . ,org-gcal-client-secret)
                           (singleEvents . "True")
@@ -151,15 +151,16 @@
                              (message "Got error: %S" error-thrown))))
                (deferred:nextc it
                  (lambda (response)
-                   (let ((temp (request-response-data response)))
-                     (if (or (eq temp nil)
-                             (string=
-                              (plist-get (plist-get temp :error) :message)
-                              "Invalid Credentials"))
+                   (let*
+                       ((temp (request-response-data response))
+                        (error-msg (plist-get (plist-get temp :error) :message)))
+                     (if error-msg
                          (progn
                            (org-gcal-refresh-token 'org-gcal-fetch)
-                           (message "I sent: %S" temp))
+                           (message "I sent: %S" temp)
+                           (message "Error message: %S" error-msg))
                        (progn
+                         (message temp)
                          (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n" (cdr x)) org-gcal-logo)
                          (write-region
                           (mapconcat 'identity
@@ -219,16 +220,16 @@ It returns the code provided by the service."
 
 (defun org-gcal-request-token ()
   "Request OAuth access at TOKEN-URL."
-  (request 
+  (request
    org-gcal-token-url
-   :type "POST"        
+   :type "POST"
    :data `(("client_id" . ,org-gcal-client-id)
            ("client_secret" . ,org-gcal-client-secret)
            ("code" . ,(org-gcal-request-authorization))
            ("redirect_uri" .  "urn:ietf:wg:oauth:2.0:oob")
            ("grant_type" . "authorization_code"))
    :parser 'org-gcal--json-read
-   :success (function* 
+   :success (function*
              (lambda (&key data &allow-other-keys)
                (when data
                  (setq org-gcal-token-plist data)
@@ -239,7 +240,7 @@ It returns the code provided by the service."
 
 (defun org-gcal-refresh-token (&optional fun start end smry loc desc id)
   "Refresh OAuth access at TOKEN-URL."
-  (interactive)  
+  (interactive)
   (lexical-let ((fun fun)
                 (start start)
                 (end end)
@@ -335,7 +336,7 @@ It returns the code provided by the service."
             (with-temp-buffer (insert-file-contents org-gcal-token-file)
                               (plist-get (read (buffer-string)) :access_token)))
         (message "\"%s\" is not exists" org-gcal-token-file)))))
-    
+
 (defun org-gcal--safe-substring (string from &optional to)
   "Calls the `substring' function safely.
 \nNo errors will be returned for out of range values of FROM and
@@ -356,7 +357,7 @@ TO.  Instead an empty string is returned."
   (let ((slst (org-gcal--parse-date s))
         (elst (org-gcal--parse-date e)))
     (and
-     (= (length s) 10) 
+     (= (length s) 10)
      (= (length e) 10)
      (= (- (time-to-seconds
             (encode-time 0 0 0
@@ -387,11 +388,11 @@ TO.  Instead an empty string is returned."
 (defun org-gcal--subsract-time ()
   (org-gcal--adjust-date 'time-subtract org-gcal-up-days))
 
-(defun org-gcal--format-iso2org (str &optional tz) 
+(defun org-gcal--format-iso2org (str &optional tz)
   (let ((plst (org-gcal--parse-date str)))
     (concat
      "<"
-     (format-time-string 
+     (format-time-string
       (if (< 11 (length str)) "%Y-%m-%d %a %H:%M" "%Y-%m-%d %a")
       (seconds-to-time
        (+ (if tz (car (current-time-zone)) 0)
@@ -408,7 +409,7 @@ TO.  Instead an empty string is returned."
 
 (defun org-gcal--format-org2iso (year mon day &optional hour min tz)
   (concat
-   (format-time-string 
+   (format-time-string
     (if (or hour min) "%Y-%m-%dT%H:%M" "%Y-%m-%d")
     (seconds-to-time
      (-
@@ -438,7 +439,7 @@ TO.  Instead an empty string is returned."
          (start (if stime stime sday))
          (end   (if etime etime eday)))
     (concat
-     "* " smry 
+     "* " smry
      (if (string= start end)
          (concat "\n  "(org-gcal--format-iso2org start))
        (if (and
@@ -463,7 +464,7 @@ TO.  Instead an empty string is returned."
                  "  :ID: " id "\n"
                  "  :END:\n\n")))
 
-(defun org-gcal--format-date (str format &optional tz) 
+(defun org-gcal--format-date (str format &optional tz)
   (let ((plst (org-gcal--parse-date str)))
     (concat
      (format-time-string format
@@ -531,7 +532,7 @@ TO.  Instead an empty string is returned."
    (org-gcal-token-plist t)
    ((and (file-exists-p org-gcal-token-file)
          (ignore-errors
-           (setq org-gcal-token-plist 
+           (setq org-gcal-token-plist
                  (with-temp-buffer
                    (insert-file-contents org-gcal-token-file)
                    (read (current-buffer))))))
