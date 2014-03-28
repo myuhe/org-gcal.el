@@ -151,7 +151,7 @@
                              (message "Got error: %S" error-thrown))))
                (deferred:nextc it
                  (lambda (response)
-                   (let*
+                   (let
                        ((temp (request-response-data response))
                         (status (request-response-status-code response))
                         (error-msg (request-response-error-thrown response)))
