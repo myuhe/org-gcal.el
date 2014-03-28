@@ -170,7 +170,7 @@
                          (org-gcal-refresh-token)))
                       ;; We got some 2xx response, but for some reason no
                       ;; message body.
-                      ((and (> 299) (eq temp nil))
+                      ((and (> 299 status) (eq temp nil))
                        (message "Received HTTP %d, but no message body."))
                       ((not (eq error-msg nil))
                        ;; Generic error-handler meant to provide useful
