@@ -171,7 +171,7 @@
                       ;; We got some 2xx response, but for some reason no
                       ;; message body.
                       ((and (> 299 status) (eq temp nil))
-                       (message "Received HTTP %d, but no message body."))
+                       (message "Received HTTP %d, but no message body." status))
                       ((not (eq error-msg nil))
                        ;; Generic error-handler meant to provide useful
                        ;; information about failure cases not otherwise
