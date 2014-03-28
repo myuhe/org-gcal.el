@@ -156,11 +156,14 @@
                         (status (request-response-status-code response))
                         (error-msg (request-response-error-thrown response)))
                      (cond
-                      ;; Receiving a 403 response could mean that the
-                      ;; calendar API has not been enabled. When the
-                      ;; user goes and enables it, a new token will
-                      ;; need to be generated. This takes care of that
-                      ;; step.
+                      ;; If there is no network connectivity, the response will
+                      ;; not include a status code.
+                      ((eq status nil)
+                       (message "Could not contact remote service. Please check your network connectivity."))
+                      ;; Receiving a 403 response could mean that the calendar
+                      ;; API has not been enabled. When the user goes and
+                      ;; enables it, a new token will need to be generated. This
+                      ;; takes care of that step.
                       ((eq 403 status)
                        (progn
                          (message "Received HTTP 403. Ensure you enabled the Calendar API through the Developers Console, then try again.")
