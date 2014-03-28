@@ -155,27 +155,38 @@
                        ((temp (request-response-data response))
                         (status (request-response-status-code response))
                         (error-msg (request-response-error-thrown response)))
-                     (cond ((eq 403 status)
-                            (progn
-                              (message "Received HTTP 403. Ensure you enabled the Calendar API through the Developers Console, then try again.")
-                              (org-gcal-refresh-token)))
-                           ((and (> 299) (eq temp nil))
-                            (message "Received HTTP %d, but no message body."))
-                           ((not (eq error-msg nil))
-                            (progn
-                              (message "I sent: %S" temp)
-                              (message "Status code: %d" status)
-                              (message "Error: %S" error-msg)))
-                            (t (progn
-                                 (message "Temp is: %S" temp)
-                                 (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n" (cdr x)) org-gcal-logo)
-                                 (write-region
-                                  (mapconcat 'identity
-                                             (mapcar (lambda (lst)
-                                                       (org-gcal--cons-list lst))
-                                                     (plist-get (request-response-data response) :items ))
-                                             "")
-                                  nil (cdr x) nil 'nomsg)))))))))))
+                     (cond
+                      ;; Receiving a 403 response could mean that the
+                      ;; calendar API has not been enabled. When the
+                      ;; user goes and enables it, a new token will
+                      ;; need to be generated. This takes care of that
+                      ;; step.
+                      ((eq 403 status)
+                       (progn
+                         (message "Received HTTP 403. Ensure you enabled the Calendar API through the Developers Console, then try again.")
+                         (org-gcal-refresh-token)))
+                      ;; We got some 2xx response, but for some reason no
+                      ;; message body.
+                      ((and (> 299) (eq temp nil))
+                       (message "Received HTTP %d, but no message body."))
+                      ((not (eq error-msg nil))
+                       ;; Generic error-handler meant to provide useful
+                       ;; information about failure cases not otherwise
+                       ;; explicitly specified.
+                       (progn
+                         (message "I sent: %S" temp)
+                         (message "Status code: %d" status)
+                         (message "Error: %S" error-msg)))
+                      ;; Fetch was successful.
+                      (t (progn
+                           (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n" (cdr x)) org-gcal-logo)
+                           (write-region
+                            (mapconcat 'identity
+                                       (mapcar (lambda (lst)
+                                                 (org-gcal--cons-list lst))
+                                               (plist-get (request-response-data response) :items ))
+                                       "")
+                            nil (cdr x) nil 'nomsg)))))))))))
 
 (defun org-gcal-post-at-point ()
   (interactive)
