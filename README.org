@@ -26,7 +26,13 @@
 
 7. Record the Client ID and Client secret for setup.
 
-   Go to [[https://www.google.com/calendar/render][Google setting page]] to check the calendar ID.
+8. Go to [[https://www.google.com/calendar/render][Google setting page]] and click the gear-shaped settings icon in the upper right, then select "Settings" from the drop down list.
+
+9. Select the "Calendars" tab, which will display a list of your calendars.
+
+10. Select the calendar you would like to synchronize with. This will take you to the "Calendar Details" page for that calendar. Near the end is a section titled "Calendar Address". Following the XML, ICAL, and HTML tags, you will see your Calendar ID.
+
+11. Copy the Calendar ID for use in the settings below, where you will use it as the first element in the org-gcal-file-alist for associating calendars with specific org files. You can associate different calendars with different org files, so repeat this for each calendar you want to use.
 
 ** Setting example
 
