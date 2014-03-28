@@ -153,22 +153,25 @@
                  (lambda (response)
                    (let*
                        ((temp (request-response-data response))
+                        (status (request-response-status-code response))
                         (error-msg (plist-get (plist-get temp :error) :message)))
-                     (if error-msg
-                         (progn
-                           (org-gcal-refresh-token 'org-gcal-fetch)
-                           (message "I sent: %S" temp)
-                           (message "Error message: %S" error-msg))
-                       (progn
-                         (message temp)
-                         (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n" (cdr x)) org-gcal-logo)
-                         (write-region
-                          (mapconcat 'identity
-                                     (mapcar (lambda (lst)
-                                               (org-gcal--cons-list lst))
-                                             (plist-get (request-response-data response) :items ))
-                                     "")
-                          nil (cdr x) nil 'nomsg))))))))))
+                     (cond ((eq temp nil)
+                            (not (eq error-msg nil))
+                            (> 299 status)
+                            (progn
+                              (message "I sent: %S" temp)
+                              (message "Status code: %d" status)
+                              (message "Error: %S" error-msg)))
+                            (t (progn
+                                 (message "Temp is: %S" temp)
+                                 (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n" (cdr x)) org-gcal-logo)
+                                 (write-region
+                                  (mapconcat 'identity
+                                             (mapcar (lambda (lst)
+                                                       (org-gcal--cons-list lst))
+                                                     (plist-get (request-response-data response) :items ))
+                                             "")
+                                  nil (cdr x) nil 'nomsg)))))))))))
 
 (defun org-gcal-post-at-point ()
   (interactive)
