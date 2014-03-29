@@ -4,7 +4,7 @@
   - Post/edit org element
 
 * Requirements
-
+ 
 - [[https://github.com/tkf/emacs-request][tkf/emacs-request]]
 - [[https://github.com/tekai/gntp.el][tekai/gntp.el]]
 
