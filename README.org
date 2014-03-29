@@ -26,13 +26,19 @@
 
 7. Record the Client ID and Client secret for setup.
 
-8. Go to [[https://www.google.com/calendar/render][Google setting page]] and click the gear-shaped settings icon in the upper right, then select "Settings" from the drop down list.
+8. Under the same *APIs & Auth* menu section, select *APIs*
 
-9. Select the "Calendars" tab, which will display a list of your calendars.
+9. Scroll down to *Calendar API*. Click the *Status* button to enable calendar API access to the app you created in steps 5 & 6.
 
-10. Select the calendar you would like to synchronize with. This will take you to the "Calendar Details" page for that calendar. Near the end is a section titled "Calendar Address". Following the XML, ICAL, and HTML tags, you will see your Calendar ID.
+   Go to [[https://www.google.com/calendar/render][Google setting page]] to check the calendar ID.
 
-11. Copy the Calendar ID for use in the settings below, where you will use it as the first element in the org-gcal-file-alist for associating calendars with specific org files. You can associate different calendars with different org files, so repeat this for each calendar you want to use.
+10. Go to [[https://www.google.com/calendar/render][Google setting page]] and click the gear-shaped settings icon in the upper right, then select "Settings" from the drop down list.
+
+11. Select the "Calendars" tab, which will display a list of your calendars.
+
+12. Select the calendar you would like to synchronize with. This will take you to the "Calendar Details" page for that calendar. Near the end is a section titled "Calendar Address". Following the XML, ICAL, and HTML tags, you will see your Calendar ID.
+
+13. Copy the Calendar ID for use in the settings below, where you will use it as the first element in the org-gcal-file-alist for associating calendars with specific org files. You can associate different calendars with different org files, so repeat this for each calendar you want to use.
 
 ** Setting example
 
