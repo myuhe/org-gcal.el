@@ -164,6 +164,10 @@
                       ;; API has not been enabled. When the user goes and
                       ;; enables it, a new token will need to be generated. This
                       ;; takes care of that step.
+                      ((eq 401 status)
+                       (progn
+                         (org-gcal--notify "Received HTTP 401" "OAuth token expired. Now trying to refresh-token")
+                         (org-gcal-refresh-token 'org-gcal-fetch)))
                       ((eq 403 status)
                        (progn
                          (message "Received HTTP 403. Ensure you enabled the Calendar API through the Developers Console, then try again.")
