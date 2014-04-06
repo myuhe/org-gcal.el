@@ -320,7 +320,7 @@ It returns the code provided by the service."
                                            (plist-get tobj :month-start)
                                            (plist-get tobj :year-start))))
         (org-gcal--notify "Archived event." (org-element-property :title elem))
-        (org-advertized-archive-subtree)))))
+        (org-archive-subtree)))))
 
 (defun org-gcal--save-sexp (data file)
   (if (file-directory-p org-gcal-dir)
