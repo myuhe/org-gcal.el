@@ -6,7 +6,7 @@
 ;; Maintainer: myuhe
 ;; Copyright (C) :2014 myuhe all rights reserved.
 ;; Created: :14-01-03
-;; Package-Requires: ((request-deferred "0.2.0") (gntp "0.1") (emacs "24") (cl-lib "0.5") (org "8.2.4"))
+;; Package-Requires: ((request-deferred "0.2.0") (gntp "0.1") (alert "1.1") (emacs "24") (cl-lib "0.5") (org "8.2.4"))
 ;; Keywords: convenience,
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -34,6 +34,7 @@
 ;;; Changelog:
 ;; 2014-01-03 Initial release.
 
+(require 'alert)
 (require 'json)
 (require 'request-deferred)
 (require 'org-element)
@@ -89,23 +90,18 @@
   :group 'org-gcal
   :type '(repeat (list :tag "Calendar file" (string :tag "Calendar Id") (file :tag "Org file"))))
 
-(defcustom org-gcal-use-notifications nil
-  "If non-nil notify via `notifications-notify'."
+(defcustom org-gcal-logo "org.png"
+  "org-gcal logo filename"
   :group 'org-gcal
-  :type 'boolean)
-
-(defcustom org-gcal-use-gntp nil
-  "If non-nil notify via `gntp-notify'."
-  :group 'org-gcal
-  :type 'boolean)
-
-(defcustom org-gcal-logo "http://raw.github.com/myuhe/org-gcal.el/master/org-gcal-logo.png"
-  "org-gcal logo filename or URL."
-  :group 'org-gcal
-  :type 'string)
+  :type `(choice  ,@(mapcar (lambda (c)
+                       `(const :tag ,c ,c))
+                     '("org.png" "emacs.png"))))
 
 (defvar org-gcal-token-plist nil
   "token plist")
+
+(defvar org-gcal-icon-list '("org.png" "emacs.png")
+  "icon file name list")
 
 (defconst org-gcal-auth-url "https://accounts.google.com/o/oauth2/auth"
   "Google OAuth2 server URL.")
@@ -159,34 +155,41 @@
                       ;; If there is no network connectivity, the response will
                       ;; not include a status code.
                       ((eq status nil)
-                       (message "Could not contact remote service. Please check your network connectivity."))
+                       (org-gcal--notify
+                        "Got Error"
+                        "Could not contact remote service. Please check your network connectivity."))
                       ;; Receiving a 403 response could mean that the calendar
                       ;; API has not been enabled. When the user goes and
                       ;; enables it, a new token will need to be generated. This
                       ;; takes care of that step.
                       ((eq 401 status)
                        (progn
-                         (org-gcal--notify "Received HTTP 401" "OAuth token expired. Now trying to refresh-token")
+                         (org-gcal--notify
+                          "Received HTTP 401"
+                          "OAuth token expired. Now trying to refresh-token")
                          (org-gcal-refresh-token 'org-gcal-fetch)))
                       ((eq 403 status)
                        (progn
-                         (message "Received HTTP 403. Ensure you enabled the Calendar API through the Developers Console, then try again.")
+                         (org-gcal--notify "Received HTTP 403"
+                                           "Ensure you enabled the Calendar API through the Developers Console, then try again.")
                          (org-gcal-refresh-token)))
                       ;; We got some 2xx response, but for some reason no
                       ;; message body.
                       ((and (> 299 status) (eq temp nil))
-                       (message "Received HTTP %d, but no message body." status))
+                       (org-gcal--notify 
+                        (concat "Received HTTP" (number-to-string status)) 
+                        "Error occured, but no message body."))
                       ((not (eq error-msg nil))
                        ;; Generic error-handler meant to provide useful
                        ;; information about failure cases not otherwise
                        ;; explicitly specified.
                        (progn
-                         (message "I sent: %S" temp)
-                         (message "Status code: %d" status)
-                         (message "Error: %S" error-msg)))
+                         (org-gcal--notify 
+                          (concat "Status code: " (number-to-string status))
+                          error-msg)))
                       ;; Fetch was successful.
                       (t (progn
-                           (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n" (cdr x)) org-gcal-logo)
+                           (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n" (cdr x)))
                            (write-region
                             (mapconcat 'identity
                                        (mapcar (lambda (lst)
@@ -316,7 +319,7 @@ It returns the code provided by the service."
                                            (plist-get tobj :day-start)
                                            (plist-get tobj :month-start)
                                            (plist-get tobj :year-start))))
-        (org-gcal--notify "Archived event." (org-element-property :title elem)  org-gcal-logo)
+        (org-gcal--notify "Archived event." (org-element-property :title elem))
         (org-advertized-archive-subtree)))))
 
 (defun org-gcal--save-sexp (data file)
@@ -349,7 +352,9 @@ It returns the code provided by the service."
           (progn
             (with-temp-buffer (insert-file-contents org-gcal-token-file)
                               (plist-get (read (buffer-string)) :refresh_token)))
-        (message "\"%s\" is not exists" org-gcal-token-file)))))
+        (org-gcal--notify 
+         (concat org-gcal-token-file " is not exists" )
+         (concat "Make" org-gcal-token-file))))))
 
 (defun org-gcal--get-access-token ()
   (if org-gcal-token-plist
@@ -359,7 +364,9 @@ It returns the code provided by the service."
           (progn
             (with-temp-buffer (insert-file-contents org-gcal-token-file)
                               (plist-get (read (buffer-string)) :access_token)))
-        (message "\"%s\" is not exists" org-gcal-token-file)))))
+        (org-gcal--notify 
+         (concat org-gcal-token-file " is not exists" )
+         (concat "Make" org-gcal-token-file))))))
 
 (defun org-gcal--safe-substring (string from &optional to)
   "Calls the `substring' function safely.
@@ -535,12 +542,10 @@ TO.  Instead an empty string is returned."
                        (plist-get (plist-get data :error) :message)
                        "Invalid Credentials")
                      (progn
-                       (org-gcal-refresh-token 'org-gcal--post-event)
-                       (message "I sent: %S" data))
+                       (org-gcal-refresh-token 'org-gcal--post-event))
                    (progn
                      (org-gcal--notify "Event Posted"
-                                       (concat "Org-gcal post event\n  " (plist-get data :summary))
-                                       org-gcal-logo)
+                                       (concat "Org-gcal post event\n  " (plist-get data :summary)))
                      (org-gcal-fetch))))))))
 
 (defun org-gcal--capture-post ()
@@ -562,14 +567,24 @@ TO.  Instead an empty string is returned."
                    (read (current-buffer)))))) t)
    (t (org-gcal-request-token))))
 
-(defun org-gcal--notify (title mes &optional icn)
-  (cond
-   (org-gcal-use-gntp
-    (gntp-notify 'org-gcal title mes "localhost" nil icn))
-   (org-gcal-use-notifications
-    (notifications-notify :title title
-                          :body mes))
-   (t (message (concat title ":  " mes)))))
+(defun org-gcal--notify (title mes)
+  (lexical-let ((file (concat org-gcal-dir org-gcal-logo))
+                (mes mes)
+                (title title))
+    (if (file-exists-p file)
+        (alert mes :title title :icon file)
+      (deferred:$
+        (deferred:url-retrieve (concat "https://raw.githubusercontent.com/myuhe/org-gcal.el/master/" org-gcal-logo))
+        (deferred:nextc it
+          (lambda (buf)
+            (with-current-buffer buf
+             (let ((tmp (substring (buffer-string) (+ (string-match "\n\n" (buffer-string)) 2))))
+               (erase-buffer)
+               (insert tmp)
+               (write-file file)))
+            (kill-buffer buf)
+            (alert mes :title title :icon file)
+            ))))))
 
 (provide 'org-gcal)
 
