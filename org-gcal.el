@@ -581,11 +581,13 @@ beginning position."
       (cons 'timestamp (match-beginning 0)))))
 
 (defun org-gcal--notify (title mes)
-  (lexical-let ((file (concat org-gcal-dir org-gcal-logo))
+  (lexical-let ((file (expand-file-name (concat org-gcal-dir org-gcal-logo)))
                 (mes mes)
                 (title title))
     (if (file-exists-p file)
-        (alert mes :title title :icon file)
+        (if (eq system-type 'gnu/linux)
+            (alert mes :title title :icon file)
+          (alert mes :title title))
       (deferred:$
         (deferred:url-retrieve (concat "https://raw.githubusercontent.com/myuhe/org-gcal.el/master/" org-gcal-logo))
         (deferred:nextc it
@@ -596,7 +598,9 @@ beginning position."
                (insert tmp)
                (write-file file)))
             (kill-buffer buf)
+            (if (eq system-type 'gnu/linux)
             (alert mes :title title :icon file)
+          (alert mes :title title))
             ))))))
 
 (provide 'org-gcal)
