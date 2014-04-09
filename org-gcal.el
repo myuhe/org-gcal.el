@@ -306,7 +306,7 @@ It returns the code provided by the service."
 (defun org-gcal--archive-old-event ()
   (goto-char (point-min))
   (while (re-search-forward org-heading-regexp nil t)
-    (goto-char (cdr (org-element-timestamp-successor)))
+    (goto-char (cdr (org-gcal--timestamp-successor)))
     (let ((elem (org-element-headline-parser nil t))
           (tobj (cadr (org-element-timestamp-parser))))
       (when (>
@@ -565,6 +565,20 @@ TO.  Instead an empty string is returned."
                    (insert-file-contents org-gcal-token-file)
                    (read (current-buffer)))))) t)
    (t (org-gcal-request-token))))
+
+(defun org-gcal--timestamp-successor ()
+  "Search for the next timestamp object.
+Return value is a cons cell whose CAR is `timestamp' and CDR is
+beginning position."
+  (save-excursion
+    (when (re-search-forward
+           (concat org-ts-regexp-both
+                   "\\|"
+                   "\\(?:<[0-9]+-[0-9]+-[0-9]+[^>\n]+?\\+[0-9]+[dwmy]>\\)"
+                   "\\|"
+                   "\\(?:<%%\\(?:([^>\n]+)\\)>\\)")
+           nil t)
+      (cons 'timestamp (match-beginning 0)))))
 
 (defun org-gcal--notify (title mes)
   (lexical-let ((file (concat org-gcal-dir org-gcal-logo))
