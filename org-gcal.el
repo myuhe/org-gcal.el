@@ -1,4 +1,4 @@
-;;; org-gcal.el --- Org sync with Google Calendar
+;;; org-gcal.el --- Org sync with Google Calendar -*- lexical-binding: t -*-
 
 ;; Author: myuhe <yuhei.maeda_at_gmail.com>
 ;; URL: https://github.com/myuhe/org-gcal.el
@@ -126,7 +126,7 @@
       (kill-buffer (get-file-buffer (cdr i)))))
   (cl-loop for x in org-gcal-file-alist
            do
-           (lexical-let ((x x)
+           (let (
                          (a-token (if a-token
                                       a-token
                                     (org-gcal--get-access-token))))
@@ -142,7 +142,7 @@
                           ("grant_type" . "authorization_code"))
                 :parser 'org-gcal--json-read
                 :error
-                (function* (lambda (&key error-thrown &allow-other-keys&rest _)
+                (cl-function (lambda (&key error-thrown )
                              (message "Got error: %S" error-thrown))))
                (deferred:nextc it
                  (lambda (response)
@@ -262,19 +262,12 @@ It returns the code provided by the service."
                  (setq org-gcal-token-plist data)
                  (org-gcal--save-sexp data org-gcal-token-file))))
    :error
-   (function* (lambda (&key error-thrown &allow-other-keys&rest _)
+   (cl-function (lambda (&key error-thrown)
                 (message "Got error: %S" error-thrown)))))
 
 (defun org-gcal-refresh-token (&optional fun start end smry loc desc id)
   "Refresh OAuth access at TOKEN-URL."
   (interactive)
-  (lexical-let ((fun fun)
-                (start start)
-                (end end)
-                (smry smry)
-                (loc loc)
-                (desc desc)
-                (id id))
     (deferred:$
       (request-deferred
        org-gcal-token-url
@@ -285,7 +278,7 @@ It returns the code provided by the service."
                ("grant_type" . "refresh_token"))
        :parser 'org-gcal--json-read
        :error
-       (function* (lambda (&key error-thrown &allow-other-keys&rest _)
+       (cl-function (lambda (&key error-thrown)
                     (message "Got error: %S" error-thrown))))
       (deferred:nextc it
         (lambda (response)
@@ -300,7 +293,7 @@ It returns the code provided by the service."
           (cond ((eq fun 'org-gcal-fetch)
                  (org-gcal-fetch (plist-get token :access_token)))
                 ((eq fun 'org-gcal--post-event)
-                 (org-gcal--post-event start end smry loc desc id (plist-get token :access_token)))))))))
+                 (org-gcal--post-event start end smry loc desc id (plist-get token :access_token))))))))
 
 ;; Internal
 (defun org-gcal--archive-old-event ()
@@ -513,7 +506,7 @@ TO.  Instead an empty string is returned."
   (if (< 11 (length str)) "dateTime" "date"))
 
 (defun org-gcal--post-event (start end smry loc desc &optional id a-token)
-  (lexical-let ((stime (org-gcal--param-date start))
+  (let ((stime (org-gcal--param-date start))
                 (etime (org-gcal--param-date end))
                 (a-token (if a-token
                              a-token
@@ -535,7 +528,7 @@ TO.  Instead an empty string is returned."
                ("grant_type" . "authorization_code"))
 
      :parser 'org-gcal--json-read
-     :success (function*
+     :success (cl-function
                (lambda (&key data &allow-other-keys)
                  (if  (string=
                        (plist-get (plist-get data :error) :message)
@@ -581,7 +574,7 @@ beginning position."
       (cons 'timestamp (match-beginning 0)))))
 
 (defun org-gcal--notify (title mes)
-  (lexical-let ((file (expand-file-name (concat org-gcal-dir org-gcal-logo)))
+  (let ((file (expand-file-name (concat org-gcal-dir org-gcal-logo)))
                 (mes mes)
                 (title title))
     (if (file-exists-p file)
