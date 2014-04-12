@@ -6,7 +6,7 @@
 * Requirements
  
 - [[https://github.com/tkf/emacs-request][tkf/emacs-request]]
-- [[https://github.com/tekai/gntp.el][tekai/gntp.el]]
+- [[https://github.com/jwiegley/alert][jwiegley/alert]]
 
   =org-gcal= is now available in the famous emacs package repo [[http://melpa.milkbox.net/][MELPA]], so the recommended way is to install it through Emacs package management system.
 
@@ -42,7 +42,7 @@
 
 ** Setting example
 
-#+begin_src emacs-lisp
+#+begin_src elisp
 (require 'org-gcal)
 (setq org-gcal-client-id "your-id-foo.apps.googleusercontent.com"
       org-gcal-client-secret "your-secret"
