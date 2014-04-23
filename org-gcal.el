@@ -205,7 +205,7 @@
     (re-search-backward org-heading-regexp)
     (re-search-forward "<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]")
     (backward-char 11)
-    (let* ((elem (org-element-headline-parser nil t))
+    (let* ((elem (org-element-headline-parser (point-max) t))
            (tobj (org-element-timestamp-parser))
            (smry (org-element-property :title elem))
            (loc  (org-element-property :LOCATION elem))
@@ -300,7 +300,7 @@ It returns the code provided by the service."
   (goto-char (point-min))
   (while (re-search-forward org-heading-regexp nil t)
     (goto-char (cdr (org-gcal--timestamp-successor)))
-    (let ((elem (org-element-headline-parser nil t))
+    (let ((elem (org-element-headline-parser (point-max) t))
           (tobj (cadr (org-element-timestamp-parser))))
       (when (>
              (time-to-seconds (time-subtract (current-time) (days-to-time org-gcal-up-days)))
