@@ -126,7 +126,7 @@
       (kill-buffer (get-file-buffer (cdr i)))))
   (cl-loop for x in org-gcal-file-alist
            do
-           (let (
+           (let ((x x)
                          (a-token (if a-token
                                       a-token
                                     (org-gcal--get-access-token))))
