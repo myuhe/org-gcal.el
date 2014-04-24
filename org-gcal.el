@@ -142,7 +142,7 @@
                           ("grant_type" . "authorization_code"))
                 :parser 'org-gcal--json-read
                 :error
-                (cl-function (lambda (&key error-thrown )
+                (cl-function (lambda (&key error-thrown)
                              (message "Got error: %S" error-thrown))))
                (deferred:nextc it
                  (lambda (response)
@@ -256,7 +256,7 @@ It returns the code provided by the service."
            ("redirect_uri" .  "urn:ietf:wg:oauth:2.0:oob")
            ("grant_type" . "authorization_code"))
    :parser 'org-gcal--json-read
-   :success (function*
+   :success (cl-function
              (lambda (&key data &allow-other-keys)
                (when data
                  (setq org-gcal-token-plist data)
@@ -297,22 +297,24 @@ It returns the code provided by the service."
 
 ;; Internal
 (defun org-gcal--archive-old-event ()
-  (goto-char (point-min))
-  (while (re-search-forward org-heading-regexp nil t)
-    (goto-char (cdr (org-gcal--timestamp-successor)))
-    (let ((elem (org-element-headline-parser nil t))
-          (tobj (cadr (org-element-timestamp-parser))))
-      (when (>
-             (time-to-seconds (time-subtract (current-time) (days-to-time org-gcal-up-days)))
-             (time-to-seconds (encode-time 0  (if (plist-get tobj :minute-start)
-                                                  (plist-get tobj :minute-start) 0)
-                                           (if (plist-get tobj :hour-start)
-                                               (plist-get tobj :hour-start) 0)
-                                           (plist-get tobj :day-start)
-                                           (plist-get tobj :month-start)
-                                           (plist-get tobj :year-start))))
-        (org-gcal--notify "Archived event." (org-element-property :title elem))
-        (org-archive-subtree)))))
+  (save-excursion
+    (goto-char (point-min))
+    (while (re-search-forward org-heading-regexp nil t)
+      (goto-char (cdr (org-gcal--timestamp-successor)))
+      (let ((elem (org-element-headline-parser nil t))
+            (tobj (cadr (org-element-timestamp-parser))))
+        (when (>
+               (time-to-seconds (time-subtract (current-time) (days-to-time org-gcal-up-days)))
+               (time-to-seconds (encode-time 0  (if (plist-get tobj :minute-start)
+                                                    (plist-get tobj :minute-start) 0)
+                                             (if (plist-get tobj :hour-start)
+                                                 (plist-get tobj :hour-start) 0)
+                                             (plist-get tobj :day-start)
+                                             (plist-get tobj :month-start)
+                                             (plist-get tobj :year-start))))
+          (org-gcal--notify "Archived event." (org-element-property :title elem))
+          (org-archive-subtree))))
+    (save-buffer)))
 
 (defun org-gcal--save-sexp (data file)
   (if (file-directory-p org-gcal-dir)
