@@ -447,6 +447,27 @@ TO.  Instead an empty string is returned."
           (car (current-time-zone)) 0))))
    (when (or hour min) ":00z")))
 
+(defun org-gcal--iso-next-day (str &optional previous-p)
+  (let ((format (if (< 11 (length str))
+                    "%Y-%m-%dT%H:%M"
+                  "%Y-%m-%d"))
+        (plst (org-gcal--parse-date str))
+        (prev (if previous-p -1 +1)))
+    (format-time-string format
+                        (seconds-to-time
+                         (+ (time-to-seconds
+                             (encode-time
+                              (plist-get plst :sec)
+                              (plist-get plst :min)
+                              (plist-get plst :hour)
+                              (plist-get plst :day)
+                              (plist-get plst :mon)
+                              (plist-get plst :year)))
+                            (* 60 60 24 prev))))))
+
+(defun org-gcal--iso-previous-day (str)
+  (org-gcal--iso-next-day str t))
+
 (defun org-gcal--cons-list (plst)
   (let* ((smry  (plist-get plst :summary))
          (desc  (plist-get plst :description))
@@ -465,7 +486,7 @@ TO.  Instead an empty string is returned."
          (end   (if etime etime eday)))
     (concat
      "* " smry
-     (if (string= start end)
+     (if (or (string= start end) (org-gcal--alldayp start end))
          (concat "\n  "(org-gcal--format-iso2org start))
        (if (and
             (= (plist-get (org-gcal--parse-date start) :year)
@@ -481,7 +502,10 @@ TO.  Instead an empty string is returned."
                    ">")
          (concat "\n  " (org-gcal--format-iso2org start)
                  "--"
-                 (org-gcal--format-iso2org end)))) "\n\n"
+                 (org-gcal--format-iso2org
+                  (if (< 11 (length end))
+                      end
+                    (org-gcal--iso-previous-day end)))))) "\n\n"
                  desc (when desc "\n")
                  "  :PROPERTIES:\n"
                  "  :LOCATION: " loc "\n"
@@ -521,7 +545,9 @@ TO.  Instead an empty string is returned."
      :type (if id "PATCH" "POST")
      :headers '(("Content-Type" . "application/json"))
      :data (json-encode `(("start"  (,stime . ,start))
-                          ("end"  (,etime . ,end))
+                          ("end"  (,etime . ,(if (equal "date" etime)
+                                                 (org-gcal--iso-next-day end)
+                                               end)))
                           ("summary" . ,smry)
                           ("location" . ,loc)
                           ("description" . ,desc)))
