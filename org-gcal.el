@@ -202,11 +202,12 @@
   (org-gcal--ensure-token)
   (save-excursion
     (end-of-line)
-    (re-search-backward org-heading-regexp)
-    (re-search-forward "<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]")
-    (backward-char 11)
+    (org-back-to-heading)
     (let* ((elem (org-element-headline-parser (point-max) t))
-           (tobj (org-element-timestamp-parser))
+           (tobj (progn (re-search-forward "<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"
+                                           (save-excursion (outline-next-heading) (point)))
+                        (goto-char (match-beginning 0))
+                        (org-element-timestamp-parser)))
            (smry (org-element-property :title elem))
            (loc  (org-element-property :LOCATION elem))
            (id  (org-element-property :ID elem))
@@ -229,9 +230,11 @@
            (desc  (if (plist-get (cadr elem) :contents-begin)
                       (replace-regexp-in-string
                        " *:PROPERTIES:\n  \\(.*\\(?:\n.*\\)*?\\) :END:\n" ""
-                       (buffer-substring-no-properties
-                        (plist-get (cadr elem) :contents-begin)
-                        (plist-get (cadr elem) :contents-end))) "")))
+                       (replace-regexp-in-string
+                        "<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*?>" ""
+                        (buffer-substring-no-properties
+                         (plist-get (cadr elem) :contents-begin)
+                         (plist-get (cadr elem) :contents-end)))) "")))
       (org-gcal--post-event start end smry loc desc id))))
 
 (defun org-gcal-request-authorization ()
@@ -485,7 +488,12 @@ TO.  Instead an empty string is returned."
          (start (if stime stime sday))
          (end   (if etime etime eday)))
     (concat
-     "* " smry
+     "* " smry "\n"
+     "  :PROPERTIES:\n"
+     "  :LOCATION: " loc "\n"
+     "  :LINK: ""[[" link "][Go to gcal web page]]\n"
+     "  :ID: " id "\n"
+     "  :END:\n"
      (if (or (string= start end) (org-gcal--alldayp start end))
          (concat "\n  "(org-gcal--format-iso2org start))
        (if (and
@@ -499,7 +507,7 @@ TO.  Instead an empty string is returned."
                    (org-gcal--format-date start "%Y-%m-%d %a %H:%M")
                    "-"
                    (org-gcal--format-date end "%H:%M")
-                   ">")
+                   ">\n")
          (concat "\n  " (org-gcal--format-iso2org start)
                  "--"
                  (org-gcal--format-iso2org
@@ -507,11 +515,7 @@ TO.  Instead an empty string is returned."
                       end
                     (org-gcal--iso-previous-day end)))))) "\n\n"
                  desc (when desc "\n")
-                 "  :PROPERTIES:\n"
-                 "  :LOCATION: " loc "\n"
-                 "  :LINK: ""[[" link "][Go to gcal web page]]\n"
-                 "  :ID: " id "\n"
-                 "  :END:\n\n")))
+                 "\n")))
 
 (defun org-gcal--format-date (str format &optional tz)
   (let ((plst (org-gcal--parse-date str)))
