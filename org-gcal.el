@@ -614,10 +614,14 @@ beginning position."
         (deferred:nextc it
           (lambda (buf)
             (with-current-buffer buf
-             (let ((tmp (substring (buffer-string) (+ (string-match "\n\n" (buffer-string)) 2))))
-               (erase-buffer)
-               (insert tmp)
-               (write-file file)))
+              (let ((tmp (substring (buffer-string) (+ (string-match "\n\n" (buffer-string)) 2)))
+                    (fbuf (find-file-noselect file)))
+                (with-current-buffer fbuf
+                  (erase-buffer)
+                  (insert tmp)
+                  (save-buffer-as-binary))
+                (kill-buffer fbuf)
+                ))
             (kill-buffer buf)
             (if (eq system-type 'gnu/linux)
             (alert mes :title title :icon file)
