@@ -123,7 +123,7 @@
       (with-current-buffer
           (find-file-noselect (cdr i))
         (org-gcal--archive-old-event))
-      (kill-buffer (get-file-buffer (cdr i)))))
+      ))
   (cl-loop for x in org-gcal-file-alist
            do
            (let ((x x)
@@ -190,13 +190,16 @@
                       ;; Fetch was successful.
                       (t (progn
                            (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n" (cdr x)))
-                           (write-region
-                            (mapconcat 'identity
+                           (with-current-buffer (find-file-noselect (cdr x))
+                             (erase-buffer)
+                             (insert
+                              (mapconcat 'identity
                                        (mapcar (lambda (lst)
                                                  (org-gcal--cons-list lst))
                                                (plist-get (request-response-data response) :items ))
-                                       "")
-                            nil (cdr x) nil 'nomsg)))))))))))
+                                       ""))
+                             (org-set-startup-visibility)
+                             (save-buffer))))))))))))
 
 (defun org-gcal-post-at-point ()
   (interactive)
