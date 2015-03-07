@@ -560,17 +560,27 @@ TO.  Instead an empty string is returned."
                ("grant_type" . "authorization_code"))
 
      :parser 'org-gcal--json-read
+     :error (cl-function
+             (lambda (&key response &allow-other-keys)
+               (let ((status (request-response-status-code response))
+                     (error-msg (request-response-error-thrown response)))
+                 (cond
+                  ((eq status 401)
+                   (progn
+                     (org-gcal--notify
+                      "Received HTTP 401"
+                      "OAuth token expired. Now trying to refresh-token")
+                     (org-gcal-refresh-token 'org-gcal--post-event start end smry loc desc id)))
+                  (t
+                   (org-gcal--notify
+                    (concat "Status code: " (number-to-string status))
+                    error-msg))))))
      :success (cl-function
                (lambda (&key data &allow-other-keys)
-                 (if  (string=
-                       (plist-get (plist-get data :error) :message)
-                       "Invalid Credentials")
-                     (progn
-                       (org-gcal-refresh-token 'org-gcal--post-event))
-                   (progn
-                     (org-gcal--notify "Event Posted"
-                                       (concat "Org-gcal post event\n  " (plist-get data :summary)))
-                     (org-gcal-fetch))))))))
+                 (progn
+                   (org-gcal--notify "Event Posted"
+                                     (concat "Org-gcal post event\n  " (plist-get data :summary)))
+                   (org-gcal-fetch)))))))
 
 (defun org-gcal--capture-post ()
   (dolist (i org-gcal-file-alist)
