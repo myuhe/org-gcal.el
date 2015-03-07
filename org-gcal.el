@@ -42,17 +42,19 @@
 (require 'cl-lib)
 
 ;; Customization
+;;; Code:
+
 (defgroup org-gcal nil "Org sync with Google Calendar"
   :tag "Org google calendar"
   :group 'org)
 
 (defcustom org-gcal-up-days 30
-  "Number of days to get events before today"
+  "Number of days to get events before today."
   :group 'org-gcal
   :type 'integer)
 
 (defcustom org-gcal-down-days 60
-  "Number of days to get events after today"
+  "Number of days to get events after today."
   :group 'org-gcal
   :type 'integer)
 
@@ -84,23 +86,22 @@
   :type 'string)
 
 (defcustom org-gcal-file-alist nil
-  "list of association '(calendar-id file) to synchronize at once
-   for calendar id."
+  "list of association '(calendar-id file) to synchronize at once for calendar id."
   :group 'org-gcal
   :type '(repeat (list :tag "Calendar file" (string :tag "Calendar Id") (file :tag "Org file"))))
 
 (defcustom org-gcal-logo "org.png"
-  "org-gcal logo filename"
+  "org-gcal logo filename."
   :group 'org-gcal
   :type `(choice  ,@(mapcar (lambda (c)
                        `(const :tag ,c ,c))
                      '("org.png" "emacs.png"))))
 
 (defvar org-gcal-token-plist nil
-  "token plist")
+  "token plist.")
 
 (defvar org-gcal-icon-list '("org.png" "emacs.png")
-  "icon file name list")
+  "icon file name list.")
 
 (defconst org-gcal-auth-url "https://accounts.google.com/o/oauth2/auth"
   "Google OAuth2 server URL.")
