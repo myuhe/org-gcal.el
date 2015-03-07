@@ -495,7 +495,7 @@ TO.  Instead an empty string is returned."
     (concat
      "* " smry "\n"
      "  :PROPERTIES:\n"
-     "  :LOCATION: " loc "\n"
+     (when loc "  :LOCATION: ") loc (when loc "\n")
      "  :LINK: ""[[" link "][Go to gcal web page]]\n"
      "  :ID: " id "\n"
      "  :END:\n"
