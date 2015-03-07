@@ -161,7 +161,8 @@
                       ;; API has not been enabled. When the user goes and
                       ;; enables it, a new token will need to be generated. This
                       ;; takes care of that step.
-                      ((eq 401 status)
+                      ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
+                           status))
                        (progn
                          (org-gcal--notify
                           "Received HTTP 401"
