@@ -123,14 +123,15 @@
     (dolist (i org-gcal-file-alist)
       (with-current-buffer
           (find-file-noselect (cdr i))
-        (org-gcal--archive-old-event))
-      ))
+        (org-gcal--archive-old-event))))
   (cl-loop for x in org-gcal-file-alist
            do
            (let ((x x)
-                         (a-token (if a-token
-                                      a-token
-                                    (org-gcal--get-access-token))))
+                 (a-token (if a-token
+                              a-token
+                            (org-gcal--get-access-token)))
+
+                 (skip-export skip-export))
              (deferred:$
                (request-deferred
                 (format org-gcal-events-url (car x))
@@ -144,7 +145,7 @@
                 :parser 'org-gcal--json-read
                 :error
                 (cl-function (lambda (&key error-thrown)
-                             (message "Got error: %S" error-thrown))))
+                               (message "Got error: %S" error-thrown))))
                (deferred:nextc it
                  (lambda (response)
                    (let
@@ -163,17 +164,22 @@
                       ;; enables it, a new token will need to be generated. This
                       ;; takes care of that step.
                       ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
-                           status))
+                                   status))
                        (progn
                          (org-gcal--notify
                           "Received HTTP 401"
                           "OAuth token expired. Now trying to refresh-token")
-                         (org-gcal-refresh-token 'org-gcal-sync)))
+                         (deferred:next
+                           (lambda()
+                             (message "hogehoge")
+                             (org-gcal-refresh-token 'org-gcal-sync skip-export)))))
                       ((eq 403 status)
                        (progn
                          (org-gcal--notify "Received HTTP 403"
                                            "Ensure you enabled the Calendar API through the Developers Console, then try again.")
-                         (org-gcal-refresh-token)))
+                         (deferred:nextc it
+                           (lambda()
+                             (org-gcal-refresh-token 'org-gcal-sync skip-export)))))
                       ;; We got some 2xx response, but for some reason no
                       ;; message body.
                       ((and (> 299 status) (eq temp nil))
@@ -193,20 +199,25 @@
                            (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n" (cdr x)))
                            (with-current-buffer (find-file-noselect (cdr x))
                              (unless skip-export
-                             (save-excursion
-                              (cl-loop for local-event in (org-gcal--parse-id (cdr x))
-                                       for pos in (org-gcal--headline-list (cdr x))
-                                       when (or
-                                             (eq (car local-event) nil)
-                                                 (not (string= (cdr local-event)
-                                                          (cdr (assoc (caar local-event)
-                                                                 (with-temp-buffer (insert-file-contents org-gcal-token-file)
-                                                                                   (plist-get (read (buffer-string)) (intern (concat ":" (car x))))))))))
-                                       do
-                                       (goto-char pos)
-                                       (org-gcal-post-at-point t)))
-                             (sit-for 2)
-                             (org-gcal-sync nil t))
+                               (save-excursion
+                                 (cl-loop for local-event in (org-gcal--parse-id (cdr x))
+                                          for pos in (org-gcal--headline-list (cdr x))
+                                          do
+                                          (message "local is %s" (caar local-event))
+                                          (message "evant is %s"(assoc (caar local-event)
+                                                                       (with-temp-buffer (insert-file-contents org-gcal-token-file)
+                                                                                         (plist-get (read (buffer-string)) (intern (concat ":" (car x)))))))
+                                          when (or
+                                                (eq (car local-event) nil)
+                                                (not (string= (cdr local-event)
+                                                              (cdr (assoc (caar local-event)
+                                                                          (with-temp-buffer (insert-file-contents org-gcal-token-file)
+                                                                                            (plist-get (read (buffer-string)) (intern (concat ":" (car x))))))))))
+                                          do
+                                          (goto-char pos)
+                                          (org-gcal-post-at-point t)))
+                               (sit-for 2)
+                               (org-gcal-sync nil t))
                              (erase-buffer)
                              (insert
                               (mapconcat 'identity
@@ -257,7 +268,8 @@
   (save-excursion
     (end-of-line)
     (org-back-to-heading)
-    (let* ((elem (org-element-headline-parser (point-max) t))
+    (let* ((skip-import skip-import)
+           (elem (org-element-headline-parser (point-max) t))
            (tobj (progn (re-search-forward "<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"
                                            (save-excursion (outline-next-heading) (point)))
                         (goto-char (match-beginning 0))
@@ -322,9 +334,8 @@ It returns the code provided by the service."
    (cl-function (lambda (&key error-thrown)
                 (message "Got error: %S" error-thrown)))))
 
-(defun org-gcal-refresh-token (&optional fun start end smry loc desc id)
+(defun org-gcal-refresh-token (&optional fun skip-export start end smry loc desc id)
   "Refresh OAuth access at TOKEN-URL."
-  (interactive)
     (deferred:$
       (request-deferred
        org-gcal-token-url
@@ -348,7 +359,7 @@ It returns the code provided by the service."
       (deferred:nextc it
         (lambda (token)
           (cond ((eq fun 'org-gcal-sync)
-                 (org-gcal-sync (plist-get token :access_token)))
+                 (org-gcal-sync (plist-get token :access_token) skip-export))
                 ((eq fun 'org-gcal--post-event)
                  (org-gcal--post-event start end smry loc desc id (plist-get token :access_token))))))))
 
@@ -377,8 +388,8 @@ It returns the code provided by the service."
   (if (file-directory-p org-gcal-dir)
       (if (file-exists-p file)
           (if  (plist-get (read (buffer-string)) :token )
-            (with-temp-file file
-              (pp (plist-put (read (buffer-string)) :token data) (current-buffer)))
+              (with-temp-file file
+                (pp (plist-put (read (buffer-string)) :token data) (current-buffer)))
             (with-temp-file file
               (pp `(:token ,data :elem nil) (current-buffer))))
         (progn
@@ -569,8 +580,8 @@ TO.  Instead an empty string is returned."
                  (org-gcal--format-iso2org
                   (if (< 11 (length end))
                       end
-                    (org-gcal--iso-previous-day end)))))) "\n\n"
-                 desc (when desc "\n")
+                    (org-gcal--iso-previous-day end)))))) "\n"
+                 desc ;; (when desc "\n")
                  "\n")))
 
 (defun org-gcal--format-date (str format &optional tz)
@@ -591,7 +602,7 @@ TO.  Instead an empty string is returned."
 (defun org-gcal--param-date (str)
   (if (< 11 (length str)) "dateTime" "date"))
 
-(defun org-gcal--post-event (start end smry loc desc &optional id a-token skip-import)
+(defun org-gcal--post-event (start end smry loc desc &optional id a-token skip-import skip-export)
   (let ((stime (org-gcal--param-date start))
                 (etime (org-gcal--param-date end))
                 (a-token (if a-token
@@ -626,7 +637,7 @@ TO.  Instead an empty string is returned."
                      (org-gcal--notify
                       "Received HTTP 401"
                       "OAuth token expired. Now trying to refresh-token")
-                     (org-gcal-refresh-token 'org-gcal--post-event start end smry loc desc id)))
+                     (org-gcal-refresh-token 'org-gcal--post-event skip-export start end smry loc desc id)))
                   (t
                    (org-gcal--notify
                     (concat "Status code: " (number-to-string status))
