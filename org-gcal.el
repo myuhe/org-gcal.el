@@ -116,7 +116,7 @@
 
 (defconst org-gcal-events-url "https://www.googleapis.com/calendar/v3/calendars/%s/events")
 
-(defun org-gcal-sync (&optional a-token skip-export)
+(defun org-gcal-sync (&optional a-token skip-export silent)
   (interactive)
   (org-gcal--ensure-token)
   (when org-gcal-auto-archive
@@ -131,7 +131,8 @@
                               a-token
                             (org-gcal--get-access-token)))
 
-                 (skip-export skip-export))
+                 (skip-export skip-export)
+                 (silent silent))
              (deferred:$
                (request-deferred
                 (format org-gcal-events-url (car x))
@@ -165,21 +166,18 @@
                       ;; takes care of that step.
                       ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
                                    status))
-                       (progn
                          (org-gcal--notify
                           "Received HTTP 401"
                           "OAuth token expired. Now trying to refresh-token")
                          (deferred:next
                            (lambda()
-                             (message "hogehoge")
-                             (org-gcal-refresh-token 'org-gcal-sync skip-export)))))
+                             (org-gcal-refresh-token 'org-gcal-sync skip-export))))
                       ((eq 403 status)
-                       (progn
                          (org-gcal--notify "Received HTTP 403"
                                            "Ensure you enabled the Calendar API through the Developers Console, then try again.")
                          (deferred:nextc it
                            (lambda()
-                             (org-gcal-refresh-token 'org-gcal-sync skip-export)))))
+                             (org-gcal-refresh-token 'org-gcal-sync skip-export))))
                       ;; We got some 2xx response, but for some reason no
                       ;; message body.
                       ((and (> 299 status) (eq temp nil))
@@ -190,49 +188,38 @@
                        ;; Generic error-handler meant to provide useful
                        ;; information about failure cases not otherwise
                        ;; explicitly specified.
-                       (progn
                          (org-gcal--notify 
                           (concat "Status code: " (number-to-string status))
-                          error-msg)))
+                          error-msg))
                       ;; Fetch was successful.
-                      (t (progn
-                           (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n" (cdr x)))
-                           (with-current-buffer (find-file-noselect (cdr x))
-                             (unless skip-export
-                               (save-excursion
-                                 (cl-loop for local-event in (org-gcal--parse-id (cdr x))
-                                          for pos in (org-gcal--headline-list (cdr x))
-                                          do
-                                          (message "local is %s" (caar local-event))
-                                          (message "evant is %s"(assoc (caar local-event)
-                                                                       (with-temp-buffer (insert-file-contents org-gcal-token-file)
-                                                                                         (plist-get (read (buffer-string)) (intern (concat ":" (car x)))))))
-                                          when (or
-                                                (eq (car local-event) nil)
-                                                (not (string= (cdr local-event)
-                                                              (cdr (assoc (caar local-event)
-                                                                          (with-temp-buffer (insert-file-contents org-gcal-token-file)
-                                                                                            (plist-get (read (buffer-string)) (intern (concat ":" (car x))))))))))
-                                          do
-                                          (goto-char pos)
-                                          (org-gcal-post-at-point t)))
-                               (sit-for 2)
-                               (org-gcal-sync nil t))
-                             (erase-buffer)
-                             (insert
-                              (mapconcat 'identity
-                                         (mapcar (lambda (lst)
-                                                   (org-gcal--cons-list lst))
-                                                 (plist-get (request-response-data response) :items )) ""))
-
-                             (let ((plst (with-temp-buffer (insert-file-contents org-gcal-token-file)
-                                                           (read (buffer-string)))))
-                               (with-temp-file org-gcal-token-file (pp (plist-put plst (intern (concat ":" (car x))) (mapcar (lambda (lst)
-                                                                                                                               (cons (plist-get lst :id) (org-gcal--cons-list lst)))
-                                                                                                                             (plist-get (request-response-data response) :items ))) (current-buffer))))
-
-                             (org-set-startup-visibility)
-                             (save-buffer))))))))))))
+                      (t
+                       (with-current-buffer (find-file-noselect (cdr x))
+                         (unless skip-export
+                           (save-excursion
+                             (cl-loop with buf = (find-file-noselect org-gcal-token-file)
+                                      for local-event in (org-gcal--parse-id (cdr x))
+                                      for pos in (org-gcal--headline-list (cdr x))
+                                      when (or
+                                            (eq (car local-event) nil)
+                                            (not (string= (cdr local-event)
+                                                          (cdr (assoc (caar local-event)
+                                                                      (with-current-buffer buf
+                                                                                        (plist-get (read (buffer-string)) (intern (concat ":" (car x))))))))))
+                                      do
+                                      (goto-char pos)
+                                      (org-gcal-post-at-point t)))
+                           (sit-for 2)
+                           (org-gcal-sync nil t t))
+                         (erase-buffer)
+                         (insert
+                          (mapconcat 'identity
+                                     (mapcar (lambda (lst)
+                                               (org-gcal--cons-list lst))
+                                             (plist-get (request-response-data response) :items )) ""))
+                         (org-set-startup-visibility)
+                         (save-buffer))
+                       (unless silent
+                       (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n" (cdr x)))))))))))))
 
 (defun org-gcal-fetch ()
   "Fetch event data from google calendar."
@@ -336,6 +323,7 @@ It returns the code provided by the service."
 
 (defun org-gcal-refresh-token (&optional fun skip-export start end smry loc desc id)
   "Refresh OAuth access at TOKEN-URL."
+  (interactive)
     (deferred:$
       (request-deferred
        org-gcal-token-url
@@ -491,14 +479,7 @@ TO.  Instead an empty string is returned."
       (if (< 11 (length str)) "%Y-%m-%d %a %H:%M" "%Y-%m-%d %a")
       (seconds-to-time
        (+ (if tz (car (current-time-zone)) 0)
-          (time-to-seconds
-           (encode-time
-            (plist-get plst :sec)
-            (plist-get plst :min)
-            (plist-get plst :hour)
-            (plist-get plst :day)
-            (plist-get plst :mon)
-            (plist-get plst :year))))))
+          (org-gcal--time-to-seconds plst))))
      ;;(if (and repeat (not (string= repeat ""))) (concat " " repeat) "")
      ">")))
 
@@ -525,14 +506,7 @@ TO.  Instead an empty string is returned."
         (prev (if previous-p -1 +1)))
     (format-time-string format
                         (seconds-to-time
-                         (+ (time-to-seconds
-                             (encode-time
-                              (plist-get plst :sec)
-                              (plist-get plst :min)
-                              (plist-get plst :hour)
-                              (plist-get plst :day)
-                              (plist-get plst :mon)
-                              (plist-get plst :year)))
+                         (+ (org-gcal--time-to-seconds plst)
                             (* 60 60 24 prev))))))
 
 (defun org-gcal--iso-previous-day (str)
@@ -590,14 +564,7 @@ TO.  Instead an empty string is returned."
      (format-time-string format
                          (seconds-to-time
                           (+ (if tz (car (current-time-zone)) 0)
-                             (time-to-seconds
-                              (encode-time
-                               (plist-get plst :sec)
-                               (plist-get plst :min)
-                               (plist-get plst :hour)
-                               (plist-get plst :day)
-                               (plist-get plst :mon)
-                               (plist-get plst :year)))))))))
+                             (org-gcal--time-to-seconds plst)))))))
 
 (defun org-gcal--param-date (str)
   (if (< 11 (length str)) "dateTime" "date"))
@@ -702,8 +669,18 @@ beginning position."
             (kill-buffer buf)
             (if (eq system-type 'gnu/linux)
             (alert mes :title title :icon file)
-          (alert mes :title title))
-            ))))))
+          (alert mes :title title))))))))
+
+(defun org-gcal--time-to-seconds (plst)
+  (time-to-seconds
+   (encode-time
+    (plist-get plst :sec)
+    (plist-get plst :min)
+    (plist-get plst :hour)
+    (plist-get plst :day)
+    (plist-get plst :mon)
+    (plist-get plst :year))))
+
 
 (provide 'org-gcal)
 
