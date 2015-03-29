@@ -207,15 +207,22 @@
                                                                                         (plist-get (read (buffer-string)) (intern (concat ":" (car x))))))))))
                                       do
                                       (goto-char pos)
-                                      (org-gcal-post-at-point t)))
+                                      (org-gcal-post-at-point t)
+                                      finally
+                                      (kill-buffer buf))
                            (sit-for 2)
-                           (org-gcal-sync nil t t))
+                           (org-gcal-sync nil t t)))
                          (erase-buffer)
                          (insert
                           (mapconcat 'identity
                                      (mapcar (lambda (lst)
                                                (org-gcal--cons-list lst))
                                              (plist-get (request-response-data response) :items )) ""))
+                         (let ((plst (with-temp-buffer (insert-file-contents org-gcal-token-file)
+                                                       (read (buffer-string)))))
+                           (with-temp-file org-gcal-token-file (pp (plist-put plst (intern (concat ":" (car x))) (mapcar (lambda (lst)
+                                                                                                                           (cons (plist-get lst :id) (org-gcal--cons-list lst)))
+                                                                                                                         (plist-get (request-response-data response) :items ))) (current-buffer))))
                          (org-set-startup-visibility)
                          (save-buffer))
                        (unless silent
