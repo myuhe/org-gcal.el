@@ -1,8 +1,9 @@
-* What is org-gcal ?
+* Org-Gcal [[http://melpa.org/#/org-gcal][file:http://melpa.org/packages/org-gcal-badge.svg]]
  =org-gcal= offers
   - Fetch google calendar event
   - Post/edit org element
-
+  - Sync between Org and Gcal
+    
 * Requirements
  
 - [[https://github.com/tkf/emacs-request][tkf/emacs-request]]
@@ -52,6 +53,8 @@
 
 
 * Usage
+** =org-gcal-sync=
+   Sync between Org and Gcal. before syncing,  execute =org-gcal-fetch= .
 ** =org-gcal-fetch=
    Fetch Google calendar events and populate =org-gcal-file-alist= locations.
 ** =org-gcal-post-at-point=
