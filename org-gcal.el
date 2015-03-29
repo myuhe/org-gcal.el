@@ -2,7 +2,7 @@
 
 ;; Author: myuhe <yuhei.maeda_at_gmail.com>
 ;; URL: https://github.com/myuhe/org-gcal.el
-;; Version: 0.1
+;; Version: 0.2
 ;; Maintainer: myuhe
 ;; Copyright (C) :2014 myuhe all rights reserved.
 ;; Created: :14-01-03
