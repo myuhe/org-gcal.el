@@ -289,9 +289,9 @@
                    t)))
            (desc  (if (plist-get (cadr elem) :contents-begin)
                       (replace-regexp-in-string
-                       " *:PROPERTIES:\n  \\(.*\\(?:\n.*\\)*?\\) :END:\n" ""
+                       " *:PROPERTIES:\n  \\(.*\\(?:\n.*\\)*?\\) :END:\n\n" ""
                        (replace-regexp-in-string
-                        "<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*?>" ""
+                        "<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*?>\n\n" ""
                         (buffer-substring-no-properties
                          (plist-get (cadr elem) :contents-begin)
                          (plist-get (cadr elem) :contents-end)))) "")))
@@ -621,7 +621,7 @@ TO.  Instead an empty string is returned."
                  (progn
                    (org-gcal--notify "Event Posted"
                                      (concat "Org-gcal post event\n  " (plist-get data :summary)))
-                     (unless skip-import (org-gcal-sync))))))))
+                     (unless skip-import (org-gcal-fetch))))))))
 
 (defun org-gcal--capture-post ()
   (dolist (i org-gcal-file-alist)
