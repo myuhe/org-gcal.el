@@ -562,8 +562,8 @@ TO.  Instead an empty string is returned."
                   (if (< 11 (length end))
                       end
                     (org-gcal--iso-previous-day end)))))) "\n"
-                 desc ;; (when desc "\n")
-                 "\n")))
+		    desc
+		    (when desc (if (string-match-p "\n$" desc) "" "\n")))))
 
 (defun org-gcal--format-date (str format &optional tz)
   (let ((plst (org-gcal--parse-date str)))
