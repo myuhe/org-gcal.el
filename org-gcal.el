@@ -671,6 +671,7 @@ beginning position."
             (with-current-buffer buf
                (let ((tmp (substring (buffer-string) (+ (string-match "\n\n" (buffer-string)) 2))))
                  (erase-buffer)
+		 (fundamental-mode)
                  (insert tmp)
                  (write-file file)))
             (kill-buffer buf)
