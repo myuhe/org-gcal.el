@@ -555,13 +555,14 @@ TO.  Instead an empty string is returned."
                    (org-gcal--format-date start "%Y-%m-%d %a %H:%M")
                    "-"
                    (org-gcal--format-date end "%H:%M")
-                   ">\n")
+                   ">")
          (concat "\n  " (org-gcal--format-iso2org start)
                  "--"
                  (org-gcal--format-iso2org
                   (if (< 11 (length end))
                       end
                     (org-gcal--iso-previous-day end)))))) "\n"
+		    (when desc "\n")
 		    desc
 		    (when desc (if (string-match-p "\n$" desc) "" "\n")))))
 
