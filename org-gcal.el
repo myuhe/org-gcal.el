@@ -291,7 +291,7 @@
                       (replace-regexp-in-string
                        " *:PROPERTIES:\n  \\(.*\\(?:\n.*\\)*?\\) :END:\n\n" ""
                        (replace-regexp-in-string
-                        "<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*?>\n\n" ""
+                        " *<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*?>\n\n" ""
                         (buffer-substring-no-properties
                          (plist-get (cadr elem) :contents-begin)
                          (plist-get (cadr elem) :contents-end)))) "")))
@@ -555,15 +555,16 @@ TO.  Instead an empty string is returned."
                    (org-gcal--format-date start "%Y-%m-%d %a %H:%M")
                    "-"
                    (org-gcal--format-date end "%H:%M")
-                   ">\n")
+                   ">")
          (concat "\n  " (org-gcal--format-iso2org start)
                  "--"
                  (org-gcal--format-iso2org
                   (if (< 11 (length end))
                       end
                     (org-gcal--iso-previous-day end)))))) "\n"
-                 desc ;; (when desc "\n")
-                 "\n")))
+		    (when desc "\n")
+		    desc
+		    (when desc (if (string-match-p "\n$" desc) "" "\n")))))
 
 (defun org-gcal--format-date (str format &optional tz)
   (let ((plst (org-gcal--parse-date str)))
@@ -671,6 +672,7 @@ beginning position."
             (with-current-buffer buf
                (let ((tmp (substring (buffer-string) (+ (string-match "\n\n" (buffer-string)) 2))))
                  (erase-buffer)
+		 (fundamental-mode)
                  (insert tmp)
                  (write-file file)))
             (kill-buffer buf)
