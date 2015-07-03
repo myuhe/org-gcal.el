@@ -289,7 +289,7 @@
                    t)))
            (desc  (if (plist-get (cadr elem) :contents-begin)
                       (replace-regexp-in-string
-                       " *<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*?>\n\n" ""
+                       "\\`\\(?: *<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*?>$\\)\n?\n?" ""
                        (replace-regexp-in-string
                         " *:PROPERTIES:\n  \\(.*\\(?:\n.*\\)*?\\) :END:\n\n" ""
                         (buffer-substring-no-properties
