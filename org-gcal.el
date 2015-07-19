@@ -503,7 +503,7 @@ TO.  Instead an empty string is returned."
                     day mon year))
       (if tz
           (car (current-time-zone)) 0))))
-   (when (or hour min) ":00z")))
+   (when (or hour min) ":00Z")))
 
 (defun org-gcal--iso-next-day (str &optional previous-p)
   (let ((format (if (< 11 (length str))
