@@ -478,32 +478,35 @@ TO.  Instead an empty string is returned."
 (defun org-gcal--subsract-time ()
   (org-gcal--adjust-date 'time-subtract org-gcal-up-days))
 
+(defun org-gcal--time-zone (seconds)
+  (current-time-zone (seconds-to-time seconds)))
+
 (defun org-gcal--format-iso2org (str &optional tz)
-  (let ((plst (org-gcal--parse-date str)))
+  (let* ((plst (org-gcal--parse-date str))
+         (seconds (org-gcal--time-to-seconds plst)))
     (concat
      "<"
      (format-time-string
       (if (< 11 (length str)) "%Y-%m-%d %a %H:%M" "%Y-%m-%d %a")
       (seconds-to-time
-       (+ (if tz (car (current-time-zone)) 0)
-          (org-gcal--time-to-seconds plst))))
+       (+ (if tz (car (org-gcal--time-zone seconds)) 0)
+          seconds)))
      ;;(if (and repeat (not (string= repeat ""))) (concat " " repeat) "")
      ">")))
 
 (defun org-gcal--format-org2iso (year mon day &optional hour min tz)
-  (concat
-   (format-time-string
-    (if (or hour min) "%Y-%m-%dT%H:%M" "%Y-%m-%d")
-    (seconds-to-time
-     (-
-      (time-to-seconds
-       (encode-time 0
-                    (if min min 0)
-                    (if hour hour 0)
-                    day mon year))
-      (if tz
-          (car (current-time-zone)) 0))))
-   (when (or hour min) ":00Z")))
+  (let ((seconds (time-to-seconds (encode-time 0
+                                               (if min min 0)
+                                               (if hour hour 0)
+                                               day mon year))))
+    (concat
+     (format-time-string
+      (if (or hour min) "%Y-%m-%dT%H:%M" "%Y-%m-%d")
+      (seconds-to-time
+       (-
+        seconds
+        (if tz (car (org-gcal--time-zone seconds)) 0))))
+     (when (or hour min) ":00Z"))))
 
 (defun org-gcal--iso-next-day (str &optional previous-p)
   (let ((format (if (< 11 (length str))
@@ -567,12 +570,13 @@ TO.  Instead an empty string is returned."
 		    (when desc (if (string-match-p "\n$" desc) "" "\n")))))
 
 (defun org-gcal--format-date (str format &optional tz)
-  (let ((plst (org-gcal--parse-date str)))
+  (let* ((plst (org-gcal--parse-date str))
+         (seconds (org-gcal--time-to-seconds plst)))
     (concat
      (format-time-string format
                          (seconds-to-time
-                          (+ (if tz (car (current-time-zone)) 0)
-                             (org-gcal--time-to-seconds plst)))))))
+                          (+ (if tz (car (org-gcal--time-zone seconds)) 0)
+                             seconds))))))
 
 (defun org-gcal--param-date (str)
   (if (< 11 (length str)) "dateTime" "date"))
