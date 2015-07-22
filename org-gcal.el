@@ -540,7 +540,7 @@ TO.  Instead an empty string is returned."
          (start (if stime stime sday))
          (end   (if etime etime eday)))
     (concat
-     "* " smry "\n"
+     "\n\n* " smry "\n"
      "  :PROPERTIES:\n"
      (when loc "  :LOCATION: ") loc (when loc "\n")
      "  :LINK: ""[[" link "][Go to gcal web page]]\n"
