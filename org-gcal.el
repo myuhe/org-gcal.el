@@ -191,7 +191,7 @@
                        ;; explicitly specified.
                          (org-gcal--notify 
                           (concat "Status code: " (number-to-string status))
-                          error-msg))
+                          (pp-to-string error-msg)))
                       ;; Fetch was successful.
                       (t
                        (with-current-buffer (find-file-noselect (cdr x))
@@ -621,7 +621,7 @@ TO.  Instead an empty string is returned."
                   (t
                    (org-gcal--notify
                     (concat "Status code: " (number-to-string status))
-                    error-msg))))))
+                    (pp-to-string error-msg)))))))
      :success (cl-function
                (lambda (&key data &allow-other-keys)
                  (progn
