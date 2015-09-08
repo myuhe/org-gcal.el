@@ -471,7 +471,7 @@ TO.  Instead an empty string is returned."
 
 (defun org-gcal--adjust-date (fn day)
   (format-time-string "%Y-%m-%dT%H:%M:%SZ"
-                      (funcall fn (current-time) (days-to-time day))))
+                      (funcall fn (current-time) (days-to-time day)) t))
 
 (defun org-gcal--add-time ()
   (org-gcal--adjust-date 'time-add org-gcal-down-days))
