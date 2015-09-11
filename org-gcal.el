@@ -372,7 +372,7 @@ It returns the code provided by the service."
                (time-to-seconds (encode-time 0  (if (plist-get tobj :minute-end)
                                                     (plist-get tobj :minute-end) 0)
                                              (if (plist-get tobj :hour-end)
-                                                 (plist-get tobj :hour-end) 0)
+                                                 (plist-get tobj :hour-end) 24)
                                              (plist-get tobj :day-end)
                                              (plist-get tobj :month-end)
                                              (plist-get tobj :year-end))))
