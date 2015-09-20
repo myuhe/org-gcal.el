@@ -95,7 +95,14 @@
   :group 'org-gcal
   :type `(choice  ,@(mapcar (lambda (c)
                        `(const :tag ,c ,c))
-                     '("org.png" "emacs.png"))))
+                            '("org.png" "emacs.png"))))
+
+(defcustom org-gcal-fetch-event-filters '()
+  "Predicate functions to filter calendar events.
+   Predicate functions take an event, and if they return `nil' the
+   event will not be fetched."
+  :group 'org-gcal
+  :type 'list)
 
 (defvar org-gcal-token-plist nil
   "token plist.")
@@ -214,16 +221,17 @@
                            (sit-for 2)
                            (org-gcal-sync nil t t)))
                          (erase-buffer)
-                         (insert
-                          (mapconcat 'identity
-                                     (mapcar (lambda (lst)
-                                               (org-gcal--cons-list lst))
-                                             (plist-get (request-response-data response) :items )) ""))
-                         (let ((plst (with-temp-buffer (insert-file-contents org-gcal-token-file)
-                                                       (read (buffer-string)))))
-                           (with-temp-file org-gcal-token-file (pp (plist-put plst (intern (concat ":" (car x))) (mapcar (lambda (lst)
-                                                                                                                           (cons (plist-get lst :id) (org-gcal--cons-list lst)))
-                                                                                                                         (plist-get (request-response-data response) :items ))) (current-buffer))))
+                         (let ((items (org-gcal--filter (plist-get (request-response-data response) :items ))))
+                           (insert
+                            (mapconcat 'identity
+                                       (mapcar (lambda (lst)
+                                                 (org-gcal--cons-list lst))
+                                               items) ""))
+                           (let ((plst (with-temp-buffer (insert-file-contents org-gcal-token-file)
+                                                         (read (buffer-string)))))
+                             (with-temp-file org-gcal-token-file (pp (plist-put plst (intern (concat ":" (car x))) (mapcar (lambda (lst)
+                                                                                                                             (cons (plist-get lst :id) (org-gcal--cons-list lst)))
+                                                                                                                           items)) (current-buffer)))))
                          (org-set-startup-visibility)
                          (save-buffer))
                        (unless silent
@@ -233,6 +241,20 @@
   "Fetch event data from google calendar."
   (interactive)
   (org-gcal-sync nil t))
+
+(defun org-gcal--filter (items)
+  "If `org-gcal-fetch-event-filters' has a list of functions,
+   run each item through all of the filters. If any filter returns
+   `nil', discard the item."
+  (if org-gcal-fetch-event-filters
+      (cl-remove-if
+       (lambda (item)
+         (and (member nil
+                      (mapcar (lambda (filter-func)
+                                (funcall filter-func item)) org-gcal-fetch-event-filters))
+              t))
+       items)
+    items))
 
 (defun org-gcal--headline-list (file)
   "DOCSTRING"
