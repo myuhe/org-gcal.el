@@ -141,7 +141,7 @@
                           (key . ,org-gcal-client-secret)
                           (singleEvents . "True")
 			  (orderBy . "startTime")
-                          (timeMin . ,(org-gcal--subsract-time))
+                          (timeMin . ,(org-gcal--subtract-time))
                           (timeMax . ,(org-gcal--add-time))
                           ("grant_type" . "authorization_code"))
                 :parser 'org-gcal--json-read
@@ -191,7 +191,7 @@
                        ;; explicitly specified.
                          (org-gcal--notify 
                           (concat "Status code: " (number-to-string status))
-                          error-msg))
+                          (pp-to-string error-msg)))
                       ;; Fetch was successful.
                       (t
                        (with-current-buffer (find-file-noselect (cdr x))
@@ -476,7 +476,7 @@ TO.  Instead an empty string is returned."
 (defun org-gcal--add-time ()
   (org-gcal--adjust-date 'time-add org-gcal-down-days))
 
-(defun org-gcal--subsract-time ()
+(defun org-gcal--subtract-time ()
   (org-gcal--adjust-date 'time-subtract org-gcal-up-days))
 
 (defun org-gcal--time-zone (seconds)
@@ -582,12 +582,17 @@ TO.  Instead an empty string is returned."
 (defun org-gcal--param-date (str)
   (if (< 11 (length str)) "dateTime" "date"))
 
+(defun org-gcal--param-date-alt (str)
+  (if (< 11 (length str)) "date" "dateTime"))
+
 (defun org-gcal--post-event (start end smry loc desc &optional id a-token skip-import skip-export)
   (let ((stime (org-gcal--param-date start))
-                (etime (org-gcal--param-date end))
-                (a-token (if a-token
-                             a-token
-                           (org-gcal--get-access-token))))
+        (etime (org-gcal--param-date end))
+        (stime-alt (org-gcal--param-date-alt start))
+        (etime-alt (org-gcal--param-date-alt end))
+        (a-token (if a-token
+                     a-token
+                   (org-gcal--get-access-token))))
     (request
      (concat
       (format org-gcal-events-url (car (car org-gcal-file-alist)))
@@ -595,10 +600,10 @@ TO.  Instead an empty string is returned."
         (concat "/" id)))
      :type (if id "PATCH" "POST")
      :headers '(("Content-Type" . "application/json"))
-     :data (json-encode `(("start"  (,stime . ,start))
-                          ("end"  (,etime . ,(if (equal "date" etime)
+     :data (json-encode `(("start" (,stime . ,start) (,stime-alt . nil))
+                          ("end" (,etime . ,(if (equal "date" etime)
                                                  (org-gcal--iso-next-day end)
-                                               end)))
+                                               end)) (,etime-alt . nil))
                           ("summary" . ,smry)
                           ("location" . ,loc)
                           ("description" . ,desc)))
@@ -621,7 +626,7 @@ TO.  Instead an empty string is returned."
                   (t
                    (org-gcal--notify
                     (concat "Status code: " (number-to-string status))
-                    error-msg))))))
+                    (pp-to-string error-msg)))))))
      :success (cl-function
                (lambda (&key data &allow-other-keys)
                  (progn
