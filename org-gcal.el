@@ -647,7 +647,7 @@ TO.  Instead an empty string is returned."
                      (org-gcal-refresh-token 'org-gcal--post-event skip-export start end smry loc desc id)))
                   (t
                    (org-gcal--notify
-                    (concat "Status code: " (number-to-string status))
+                    (concat "Status code: " (pp-to-string status))
                     (pp-to-string error-msg)))))))
      :success (cl-function
                (lambda (&key data &allow-other-keys)
