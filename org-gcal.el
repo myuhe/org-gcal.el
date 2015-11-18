@@ -153,7 +153,7 @@
                           ("grant_type" . "authorization_code"))
                 :parser 'org-gcal--json-read
                 :error
-                (cl-function (lambda (&key error-thrown)
+                (cl-function (lambda (&key error-thrown &allow-other-keys)
                                (message "Got error: %S" error-thrown))))
                (deferred:nextc it
                  (lambda (response)
@@ -348,7 +348,7 @@ It returns the code provided by the service."
                  (setq org-gcal-token-plist data)
                  (org-gcal--save-sexp data org-gcal-token-file))))
    :error
-   (cl-function (lambda (&key error-thrown)
+   (cl-function (lambda (&key error-thrown &allow-other-keys)
                 (message "Got error: %S" error-thrown)))))
 
 (defun org-gcal-refresh-token (&optional fun skip-export start end smry loc desc id)
@@ -364,7 +364,7 @@ It returns the code provided by the service."
                ("grant_type" . "refresh_token"))
        :parser 'org-gcal--json-read
        :error
-       (cl-function (lambda (&key error-thrown)
+       (cl-function (lambda (&key error-thrown &allow-other-keys)
                     (message "Got error: %S" error-thrown))))
       (deferred:nextc it
         (lambda (response)
