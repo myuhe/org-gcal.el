@@ -144,12 +144,12 @@
                (request-deferred
                 (format org-gcal-events-url (car x))
                 :type "GET"
-                :params `((access_token . ,a-token)
-                          (key . ,org-gcal-client-secret)
-                          (singleEvents . "True")
-			  (orderBy . "startTime")
-                          (timeMin . ,(org-gcal--subtract-time))
-                          (timeMax . ,(org-gcal--add-time))
+                :params `(("access_token" . ,a-token)
+                          ("key" . ,org-gcal-client-secret)
+                          ("singleEvents" . "True")
+			  ("orderBy" . "startTime")
+                          ("timeMin" . ,(org-gcal--subtract-time))
+                          ("timeMax" . ,(org-gcal--add-time))
                           ("grant_type" . "authorization_code"))
                 :parser 'org-gcal--json-read
                 :error
@@ -629,8 +629,8 @@ TO.  Instead an empty string is returned."
                           ("summary" . ,smry)
                           ("location" . ,loc)
                           ("description" . ,desc)))
-     :params `((access_token . ,a-token)
-               (key . ,org-gcal-client-secret)
+     :params `(("access_token" . ,a-token)
+               ("key" . ,org-gcal-client-secret)
                ("grant_type" . "authorization_code"))
 
      :parser 'org-gcal--json-read
