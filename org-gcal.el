@@ -113,7 +113,7 @@
 (defconst org-gcal-auth-url "https://accounts.google.com/o/oauth2/auth"
   "Google OAuth2 server URL.")
 
-(defconst org-gcal-token-url "https://accounts.google.com/o/oauth2/token"
+(defconst org-gcal-token-url "https://www.googleapis.com/oauth2/v3/token"
   "Google OAuth2 server URL.")
 
 (defconst org-gcal-resource-url "https://www.googleapis.com/auth/calendar"
@@ -144,16 +144,16 @@
                (request-deferred
                 (format org-gcal-events-url (car x))
                 :type "GET"
-                :params `((access_token . ,a-token)
-                          (key . ,org-gcal-client-secret)
-                          (singleEvents . "True")
-			  (orderBy . "startTime")
-                          (timeMin . ,(org-gcal--subtract-time))
-                          (timeMax . ,(org-gcal--add-time))
+                :params `(("access_token" . ,a-token)
+                          ("key" . ,org-gcal-client-secret)
+                          ("singleEvents" . "True")
+			  ("orderBy" . "startTime")
+                          ("timeMin" . ,(org-gcal--subtract-time))
+                          ("timeMax" . ,(org-gcal--add-time))
                           ("grant_type" . "authorization_code"))
                 :parser 'org-gcal--json-read
                 :error
-                (cl-function (lambda (&key error-thrown)
+                (cl-function (lambda (&key error-thrown &allow-other-keys)
                                (message "Got error: %S" error-thrown))))
                (deferred:nextc it
                  (lambda (response)
@@ -348,7 +348,7 @@ It returns the code provided by the service."
                  (setq org-gcal-token-plist data)
                  (org-gcal--save-sexp data org-gcal-token-file))))
    :error
-   (cl-function (lambda (&key error-thrown)
+   (cl-function (lambda (&key error-thrown &allow-other-keys)
                 (message "Got error: %S" error-thrown)))))
 
 (defun org-gcal-refresh-token (&optional fun skip-export start end smry loc desc id)
@@ -364,7 +364,7 @@ It returns the code provided by the service."
                ("grant_type" . "refresh_token"))
        :parser 'org-gcal--json-read
        :error
-       (cl-function (lambda (&key error-thrown)
+       (cl-function (lambda (&key error-thrown &allow-other-keys)
                     (message "Got error: %S" error-thrown))))
       (deferred:nextc it
         (lambda (response)
@@ -629,8 +629,8 @@ TO.  Instead an empty string is returned."
                           ("summary" . ,smry)
                           ("location" . ,loc)
                           ("description" . ,desc)))
-     :params `((access_token . ,a-token)
-               (key . ,org-gcal-client-secret)
+     :params `(("access_token" . ,a-token)
+               ("key" . ,org-gcal-client-secret)
                ("grant_type" . "authorization_code"))
 
      :parser 'org-gcal--json-read
@@ -647,7 +647,7 @@ TO.  Instead an empty string is returned."
                      (org-gcal-refresh-token 'org-gcal--post-event skip-export start end smry loc desc id)))
                   (t
                    (org-gcal--notify
-                    (concat "Status code: " (number-to-string status))
+                    (concat "Status code: " (pp-to-string status))
                     (pp-to-string error-msg)))))))
      :success (cl-function
                (lambda (&key data &allow-other-keys)
