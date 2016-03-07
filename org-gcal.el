@@ -424,7 +424,9 @@ It returns the code provided by the service."
     (re-search-forward "^{" nil t)
     (delete-region (point-min) (1- (point)))
     (goto-char (point-min))
-    (json-read)))
+    (json-read-from-string
+     (decode-coding-string
+      (buffer-substring-no-properties (point-min) (point-max)) 'utf-8))))
 
 (defun org-gcal--get-refresh-token ()
   (if org-gcal-token-plist
