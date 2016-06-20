@@ -311,13 +311,14 @@
                  (when (plist-get (cadr tobj) :hour-start)
                    t)))
            (desc  (if (plist-get (cadr elem) :contents-begin)
-                      (replace-regexp-in-string
-                       "\\`\\(?: *<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*?>$\\)\n?\n?" ""
+		      (replace-regexp-in-string "✱" "*"
                        (replace-regexp-in-string
-                        " *:PROPERTIES:\n  \\(.*\\(?:\n.*\\)*?\\) :END:\n\n" ""
-                        (buffer-substring-no-properties
-                         (plist-get (cadr elem) :contents-begin)
-                         (plist-get (cadr elem) :contents-end)))) "")))
+                        "\\`\\(?: *<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*?>$\\)\n?\n?" ""
+                        (replace-regexp-in-string
+                         " *:PROPERTIES:\n  \\(.*\\(?:\n.*\\)*?\\) :END:\n\n" ""
+                         (buffer-substring-no-properties
+                          (plist-get (cadr elem) :contents-begin)
+                          (plist-get (cadr elem) :contents-end))))) "")))
       (org-gcal--post-event start end smry loc desc id nil skip-import))))
 
 (defun org-gcal-request-authorization ()
@@ -591,7 +592,7 @@ TO.  Instead an empty string is returned."
                       end
                     (org-gcal--iso-previous-day end)))))) "\n"
 		    (when desc "\n")
-		    desc
+		    (replace-regexp-in-string "\*" "✱" desc)
 		    (when desc (if (string-match-p "\n$" desc) "" "\n")))))
 
 (defun org-gcal--format-date (str format &optional tz)
