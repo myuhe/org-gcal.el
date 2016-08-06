@@ -592,7 +592,7 @@ TO.  Instead an empty string is returned."
                     (org-gcal--iso-previous-day end)))))) "\n"
 		    (when desc "\n")
 		    desc
-		    (when desc (if (string-match-p "\n$" desc) "" "\n")))))
+		    (when desc (if (string= "\n" (org-gcal--safe-substring desc -1)) "" "\n")))))
 
 (defun org-gcal--format-date (str format &optional tz)
   (let* ((plst (org-gcal--parse-date str))
