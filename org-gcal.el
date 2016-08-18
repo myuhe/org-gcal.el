@@ -110,6 +110,8 @@
 (defvar org-gcal-icon-list '("org.png" "emacs.png")
   "icon file name list.")
 
+(defvar org-gcal-header-alist ())
+
 (defconst org-gcal-auth-url "https://accounts.google.com/o/oauth2/auth"
   "Google OAuth2 server URL.")
 
@@ -222,6 +224,8 @@
                            (org-gcal-sync nil t t)))
                          (erase-buffer)
                          (let ((items (org-gcal--filter (plist-get (request-response-data response) :items ))))
+			   (if (assoc (car x) org-gcal-header-alist)
+			       (insert (cdr (assoc (car x) org-gcal-header-alist))))
                            (insert
                             (mapconcat 'identity
                                        (mapcar (lambda (lst)
