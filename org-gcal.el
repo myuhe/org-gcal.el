@@ -450,7 +450,7 @@ It returns the code provided by the service."
                               (plist-get (plist-get (read (buffer-string)) :token) :access_token)))
         (org-gcal--notify 
          (concat org-gcal-token-file " is not exists" )
-         (concat "Make" org-gcal-token-file))))))
+         (concat "Make " org-gcal-token-file))))))
 
 (defun org-gcal--safe-substring (string from &optional to)
   "Calls the `substring' function safely.
