@@ -56,7 +56,7 @@
 ** =org-gcal-sync=
    Sync between Org and Gcal. before syncing,  execute =org-gcal-fetch= .
 ** =org-gcal-fetch=
-   Fetch Google calendar events and populate =org-gcal-file-alist= locations.
+   Fetch Google calendar events and populate =org-gcal-file-alist= locations. The org files in =org-gcal-file-alist= should be blank or all of their headlines should have timestamps.
 ** =org-gcal-post-at-point=
    Post/edit org block at point to Google calendar.
 ** =org-gcal-refresh-token=
