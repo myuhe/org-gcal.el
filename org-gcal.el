@@ -215,7 +215,7 @@
                                                                                         (plist-get (read (buffer-string)) (intern (concat ":" (car x))))))))))
                                       do
                                       (goto-char pos)
-                                      (org-gcal-post-at-point t)
+                                      (org-gcal-post-at-point (car x) t)
                                       finally
                                       (kill-buffer buf))
                            (sit-for 2)
@@ -279,7 +279,7 @@
                                 (car (org-element-map (org-element-at-point) 'headline
                                   (lambda (hl) (org-element-property :end hl)))))))))))
 
-(defun org-gcal-post-at-point (&optional skip-import)
+(defun org-gcal-post-at-point (calendar &optional skip-import)
   (interactive)
   (org-gcal--ensure-token)
   (save-excursion
@@ -318,7 +318,7 @@
                         (buffer-substring-no-properties
                          (plist-get (cadr elem) :contents-begin)
                          (plist-get (cadr elem) :contents-end)))) "")))
-      (org-gcal--post-event start end smry loc desc id nil skip-import))))
+      (org-gcal--post-event start end smry loc desc calendar id nil skip-import))))
 
 (defun org-gcal-delete-at-point (&optional skip-import)
   (interactive)
@@ -365,7 +365,7 @@ It returns the code provided by the service."
    (cl-function (lambda (&key error-thrown &allow-other-keys)
                 (message "Got error: %S" error-thrown)))))
 
-(defun org-gcal-refresh-token (&optional fun skip-export start end smry loc desc id)
+(defun org-gcal-refresh-token (&optional fun skip-export start end smry loc desc calendar id)
   "Refresh OAuth access at TOKEN-URL."
   (interactive)
     (deferred:$
@@ -393,7 +393,7 @@ It returns the code provided by the service."
           (cond ((eq fun 'org-gcal-sync)
                  (org-gcal-sync (plist-get token :access_token) skip-export))
                 ((eq fun 'org-gcal--post-event)
-                 (org-gcal--post-event start end smry loc desc id (plist-get token :access_token)))
+                 (org-gcal--post-event start end smry loc desc calendar id (plist-get token :access_token)))
                 ((eq fun 'org-gcal--delete-event)
                  (org-gcal--delete-event id (plist-get token :access_token))))))))
 
@@ -625,7 +625,7 @@ TO.  Instead an empty string is returned."
 (defun org-gcal--param-date-alt (str)
   (if (< 11 (length str)) "date" "dateTime"))
 
-(defun org-gcal--post-event (start end smry loc desc &optional id a-token skip-import skip-export)
+(defun org-gcal--post-event (start end smry loc desc calendar &optional id a-token skip-import skip-export)
   (let ((stime (org-gcal--param-date start))
         (etime (org-gcal--param-date end))
         (stime-alt (org-gcal--param-date-alt start))
@@ -635,7 +635,7 @@ TO.  Instead an empty string is returned."
                    (org-gcal--get-access-token))))
     (request
      (concat
-      (format org-gcal-events-url (car (car org-gcal-file-alist)))
+      (format org-gcal-events-url calendar)
       (when id
         (concat "/" id)))
      :type (if id "PATCH" "POST")
@@ -662,7 +662,7 @@ TO.  Instead an empty string is returned."
                      (org-gcal--notify
                       "Received HTTP 401"
                       "OAuth token expired. Now trying to refresh-token")
-                     (org-gcal-refresh-token 'org-gcal--post-event skip-export start end smry loc desc id)))
+                     (org-gcal-refresh-token 'org-gcal--post-event skip-export start end smry loc desc calendar id)))
                   (t
                    (org-gcal--notify
                     (concat "Status code: " (pp-to-string status))
@@ -714,7 +714,7 @@ TO.  Instead an empty string is returned."
   (dolist (i org-gcal-file-alist)
     (when (string=  (file-name-nondirectory (cdr i))
                     (substring (buffer-name) 8))
-      (org-gcal-post-at-point))))
+      (org-gcal-post-at-point (car i)))))
 
 (add-hook 'org-capture-before-finalize-hook 'org-gcal--capture-post)
 
