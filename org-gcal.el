@@ -287,7 +287,6 @@
 						(car (rassoc (buffer-file-name) org-gcal-file-alist))
 						)))
 	(message (concat "post-at-point " calendar-url))
-	)
   (org-gcal--ensure-token calendar-url)
   (save-excursion
     (end-of-line)
@@ -325,7 +324,25 @@
                         (buffer-substring-no-properties
                          (plist-get (cadr elem) :contents-begin)
                          (plist-get (cadr elem) :contents-end)))) "")))
-      (org-gcal--post-event start end smry loc desc id nil skip-import))))
+      (org-gcal--post-event start end smry loc desc id nil skip-import)))))
+
+(defun org-gcal-delete-at-point (&optional skip-import calendar-url)
+  (interactive)
+  (let ((calendar-url (if calendar-url
+			  calendar-url
+			(car (rassoc (buffer-file-name) org-gcal-file-alist))
+			)))
+  (org-gcal--ensure-token)
+  (save-excursion
+    (end-of-line)
+    (org-back-to-heading)
+    (let* ((skip-import skip-import)
+           (elem (org-element-headline-parser (point-max) t))
+           (smry (org-element-property :title elem))
+           (id (org-element-property :ID elem)))
+      (when (and id
+                 (y-or-n-p (format "Do you really want to delete event?\n\n%s\n\n" smry)))
+        (org-gcal--delete-event address-url id nil skip-import))))))
 
 (defun org-gcal-request-authorization (calendar-url)
   "Request OAuth authorization at AUTH-URL by launching `browse-url'.
@@ -391,7 +408,9 @@ It returns the code provided by the service."
           (cond ((eq fun 'org-gcal-sync)
                  (org-gcal-sync (plist-get token :access_token) skip-export))
                 ((eq fun 'org-gcal--post-event)
-                 (org-gcal--post-event start end smry loc desc calendar-url id (plist-get token :access_token))))))))))
+                 (org-gcal--post-event start end smry loc desc calendar-url id (plist-get token :access_token)))
+                ((eq fun 'org-gcal--delete-event)
+                 (org-gcal--delete-event calendar-url id (plist-get token :access_token))))))))))
 
 ;; Internal
 (defun org-gcal--archive-old-event ()
@@ -669,6 +688,42 @@ TO.  Instead an empty string is returned."
                    (org-gcal--notify "Event Posted"
                                      (concat "Org-gcal post event\n  " (plist-get data :summary)))
                      (unless skip-import (org-gcal-fetch))))))))
+
+(defun org-gcal--delete-event (calendar-url event-id &optional a-token skip-import skip-export)
+  (let ((skip-import skip-import)
+        (a-token (if a-token
+                     a-token
+                   (org-gcal--get-access-token calendar-url)))
+        (calendar-id (caar org-gcal-file-alist)))
+    (request
+     (concat
+      (format org-gcal-events-url calendar-id)
+      (concat "/" event-id))
+     :type "DELETE"
+     :headers '(("Content-Type" . "application/json"))
+     :params `(("access_token" . ,a-token)
+               ("key" . ,org-gcal-client-secret)
+               ("grant_type" . "authorization_code"))
+     :error (cl-function
+             (lambda (&key response &allow-other-keys)
+               (let ((status (request-response-status-code response))
+                     (error-msg (request-response-error-thrown response)))
+                 (cond
+                  ((eq status 401)
+                   (progn
+                     (org-gcal--notify
+                      "Received HTTP 401"
+                      "OAuth token expired. Now trying to refresh-token")
+                     (org-gcal-refresh-token 'org-gcal--delete-event skip-export nil nil nil nil nil event-id)))
+                  (t
+                   (org-gcal--notify
+                    (concat "Status code: " (pp-to-string status))
+                    (pp-to-string error-msg)))))))
+     :success (cl-function
+               (lambda (&key data &allow-other-keys)
+                 (progn
+                   (org-gcal-fetch)
+                   (org-gcal--notify "Event Deleted" "Org-gcal deleted event")))))))
 
 (defun org-gcal--capture-post ()
   (dolist (i org-gcal-file-alist)
