@@ -88,7 +88,7 @@
 (defcustom org-gcal-file-alist nil
   "list of association '(calendar-id file) to synchronize at once for calendar id."
   :group 'org-gcal
-  :type '(repeat (list :tag "Calendar file" (string :tag "Calendar Id") (file :tag "Org file"))))
+  :type '(alist :key-type (string :tag "Calendar Id") :value-type (file :tag "Org file")))
 
 (defcustom org-gcal-logo "org.png"
   "org-gcal logo filename."
