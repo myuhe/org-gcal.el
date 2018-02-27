@@ -3,9 +3,9 @@
   - Fetch google calendar event
   - Post/edit org element
   - Sync between Org and Gcal
-    
+
 * Requirements
- 
+
 - [[https://github.com/tkf/emacs-request][tkf/emacs-request]]
 - [[https://github.com/jwiegley/alert][jwiegley/alert]]
 
@@ -27,7 +27,7 @@
 
 7. Record the Client ID and Client secret for setup.
 
-8. Under the same *APIs & Auth* menu section, select *APIs*
+8. Under the same *APIs & Auth* menu section, select *Library*
 
 9. Scroll down to *Calendar API*. Click the *Status* button to enable calendar API access to the app you created in steps 5 & 6.
 
