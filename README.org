@@ -39,7 +39,7 @@
 
 12. Select the calendar you would like to synchronize with. This will take you to the "Calendar Details" page for that calendar. Near the end is a section titled "Calendar Address". Following the XML, ICAL, and HTML tags, you will see your Calendar ID.
 
-13. Copy the Calendar ID for use in the settings below, where you will use it as the first element in the org-gcal-file-alist for associating calendars with specific org files. You can associate different calendars with different org files, so repeat this for each calendar you want to use.
+13. Copy the Calendar ID for use in the settings below, where you will use it as the first element in the org-gcal-file-alist for associating calendars with specific org files. You can associate different calendars with different org files, so repeat this for each calendar you want to use. Currently, the address is found in the box entitled "{Public,Secret} address in iCal format" where the string to retrieve is that directly following the `https://calendar.google.com/calendar/ical/` address, and ending with `calendar.google.com`, e.g. `<your_cal_string>%40group.calendar.google.com`. You'll need to convert `%40` to `@`, and you can repeat this process for each individual calendar you wish to sync.
 
 ** Setting example
 
@@ -48,7 +48,8 @@
 (setq org-gcal-client-id "your-id-foo.apps.googleusercontent.com"
       org-gcal-client-secret "your-secret"
       org-gcal-file-alist '(("your-mail@gmail.com" .  "~/schedule.org")
-                            ("another-mail@gmail.com" .  "~/task.org")))
+                            ("another-mail@gmail.com" .  "~/task.org"))
+                            ("yourcalstring@group.calendar.google.com" . "~/another_cal.org")))
 #+end_src
 
 
