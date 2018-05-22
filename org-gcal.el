@@ -104,6 +104,11 @@
   :group 'org-gcal
   :type 'list)
 
+(defcustom org-gcal-notify-p t
+  "If nil no more alert messages are shown for status updates."
+  :group 'org-gcal
+  :type 'boolean)
+
 (defvar org-gcal-token-plist nil
   "token plist.")
 
@@ -749,27 +754,28 @@ beginning position."
       (cons 'timestamp (match-beginning 0)))))
 
 (defun org-gcal--notify (title mes)
-  (let ((file (expand-file-name (concat org-gcal-dir org-gcal-logo)))
-                (mes mes)
-                (title title))
-    (if (file-exists-p file)
-        (if (eq system-type 'gnu/linux)
-            (alert mes :title title :icon file)
-          (alert mes :title title))
-      (deferred:$
-        (deferred:url-retrieve (concat "https://raw.githubusercontent.com/myuhe/org-gcal.el/master/" org-gcal-logo))
-        (deferred:nextc it
-          (lambda (buf)
-            (with-current-buffer buf
-               (let ((tmp (substring (buffer-string) (+ (string-match "\n\n" (buffer-string)) 2))))
-                 (erase-buffer)
-		 (fundamental-mode)
-                 (insert tmp)
-                 (write-file file)))
-            (kill-buffer buf)
-            (if (eq system-type 'gnu/linux)
-            (alert mes :title title :icon file)
-          (alert mes :title title))))))))
+  (when org-gcal-notify-p
+    (let ((file (expand-file-name (concat org-gcal-dir org-gcal-logo)))
+          (mes mes)
+          (title title))
+      (if (file-exists-p file)
+          (if (eq system-type 'gnu/linux)
+              (alert mes :title title :icon file)
+            (alert mes :title title))
+        (deferred:$
+          (deferred:url-retrieve (concat "https://raw.githubusercontent.com/myuhe/org-gcal.el/master/" org-gcal-logo))
+          (deferred:nextc it
+            (lambda (buf)
+              (with-current-buffer buf
+                (let ((tmp (substring (buffer-string) (+ (string-match "\n\n" (buffer-string)) 2))))
+                  (erase-buffer)
+                  (fundamental-mode)
+                  (insert tmp)
+                  (write-file file)))
+              (kill-buffer buf)
+              (if (eq system-type 'gnu/linux)
+                  (alert mes :title title :icon file)
+                (alert mes :title title)))))))))
 
 (defun org-gcal--time-to-seconds (plst)
   (time-to-seconds
