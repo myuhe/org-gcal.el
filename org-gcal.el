@@ -744,27 +744,25 @@ beginning position."
       (cons 'timestamp (match-beginning 0)))))
 
 (defun org-gcal--notify (title mes)
-  (let ((file (expand-file-name (concat org-gcal-dir org-gcal-logo)))
-                (mes mes)
-                (title title))
-    (if (file-exists-p file)
-        (if (eq system-type 'gnu/linux)
+  (if (eq system-type 'gnu/linux)
+      (let ((file (expand-file-name (concat org-gcal-dir org-gcal-logo)))
+            (mes mes)
+            (title title))
+        (if (file-exists-p file)
             (alert mes :title title :icon file)
-          (alert mes :title title))
-      (deferred:$
-        (deferred:url-retrieve (concat "https://raw.githubusercontent.com/myuhe/org-gcal.el/master/" org-gcal-logo))
-        (deferred:nextc it
-          (lambda (buf)
-            (with-current-buffer buf
-               (let ((tmp (substring (buffer-string) (+ (string-match "\n\n" (buffer-string)) 2))))
-                 (erase-buffer)
-		 (fundamental-mode)
-                 (insert tmp)
-                 (write-file file)))
-            (kill-buffer buf)
-            (if (eq system-type 'gnu/linux)
-            (alert mes :title title :icon file)
-          (alert mes :title title))))))))
+          (deferred:$
+            (deferred:url-retrieve (concat "https://raw.githubusercontent.com/myuhe/org-gcal.el/master/" org-gcal-logo))
+            (deferred:nextc it
+              (lambda (buf)
+                (with-current-buffer buf
+                  (let ((tmp (substring (buffer-string) (+ (string-match "\n\n" (buffer-string)) 2))))
+                    (erase-buffer)
+                    (fundamental-mode)
+                    (insert tmp)
+                    (write-file file)))
+                (kill-buffer buf)
+                (alert mes :title title :icon file))))))
+    (alert mes :title title)))
 
 (defun org-gcal--time-to-seconds (plst)
   (time-to-seconds
