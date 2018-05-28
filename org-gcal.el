@@ -2,6 +2,7 @@
 
 ;; Author: myuhe <yuhei.maeda_at_gmail.com>
 ;; URL: https://github.com/myuhe/org-gcal.el
+;; Package-Version: 20170420.1401
 ;; Version: 0.2
 ;; Maintainer: myuhe
 ;; Copyright (C) :2014 myuhe all rights reserved.
@@ -324,6 +325,20 @@
                          (plist-get (cadr elem) :contents-end)))) "")))
       (org-gcal--post-event start end smry loc desc id nil skip-import))))
 
+(defun org-gcal-delete-at-point (&optional skip-import)
+  (interactive)
+  (org-gcal--ensure-token)
+  (save-excursion
+    (end-of-line)
+    (org-back-to-heading)
+    (let* ((skip-import skip-import)
+           (elem (org-element-headline-parser (point-max) t))
+           (smry (org-element-property :title elem))
+           (id (org-element-property :ID elem)))
+      (when (and id
+                 (y-or-n-p (format "Do you really want to delete event?\n\n%s\n\n" smry)))
+        (org-gcal--delete-event id nil skip-import)))))
+
 (defun org-gcal-request-authorization ()
   "Request OAuth authorization at AUTH-URL by launching `browse-url'.
 CLIENT-ID is the client id provided by the provider.
@@ -383,7 +398,9 @@ It returns the code provided by the service."
           (cond ((eq fun 'org-gcal-sync)
                  (org-gcal-sync (plist-get token :access_token) skip-export))
                 ((eq fun 'org-gcal--post-event)
-                 (org-gcal--post-event start end smry loc desc id (plist-get token :access_token))))))))
+                 (org-gcal--post-event start end smry loc desc id (plist-get token :access_token)))
+                ((eq fun 'org-gcal--delete-event)
+                 (org-gcal--delete-event id (plist-get token :access_token))))))))
 
 ;; Internal
 (defun org-gcal--archive-old-event ()
@@ -661,6 +678,42 @@ TO.  Instead an empty string is returned."
                    (org-gcal--notify "Event Posted"
                                      (concat "Org-gcal post event\n  " (plist-get data :summary)))
                      (unless skip-import (org-gcal-fetch))))))))
+
+(defun org-gcal--delete-event (event-id &optional a-token skip-import skip-export)
+  (let ((skip-import skip-import)
+        (a-token (if a-token
+                     a-token
+                   (org-gcal--get-access-token)))
+        (calendar-id (caar org-gcal-file-alist)))
+    (request
+     (concat
+      (format org-gcal-events-url calendar-id)
+      (concat "/" event-id))
+     :type "DELETE"
+     :headers '(("Content-Type" . "application/json"))
+     :params `(("access_token" . ,a-token)
+               ("key" . ,org-gcal-client-secret)
+               ("grant_type" . "authorization_code"))
+     :error (cl-function
+             (lambda (&key response &allow-other-keys)
+               (let ((status (request-response-status-code response))
+                     (error-msg (request-response-error-thrown response)))
+                 (cond
+                  ((eq status 401)
+                   (progn
+                     (org-gcal--notify
+                      "Received HTTP 401"
+                      "OAuth token expired. Now trying to refresh-token")
+                     (org-gcal-refresh-token 'org-gcal--delete-event skip-export nil nil nil nil nil event-id)))
+                  (t
+                   (org-gcal--notify
+                    (concat "Status code: " (pp-to-string status))
+                    (pp-to-string error-msg)))))))
+     :success (cl-function
+               (lambda (&key data &allow-other-keys)
+                 (progn
+                   (org-gcal-fetch)
+                   (org-gcal--notify "Event Deleted" "Org-gcal deleted event")))))))
 
 (defun org-gcal--capture-post ()
   (dolist (i org-gcal-file-alist)
