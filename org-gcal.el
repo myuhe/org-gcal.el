@@ -415,7 +415,9 @@ It returns the code provided by the service."
                                              (plist-get tobj :month-end)
                                              (plist-get tobj :year-end))))
           (org-gcal--notify "Archived event." (org-element-property :title elem))
-          (org-archive-subtree))))
+          (let ((kill-ring kill-ring)
+                (select-enable-clipboard nil))
+            (org-archive-subtree)))))
     (save-buffer)))
 
 (defun org-gcal--save-sexp (data file)
