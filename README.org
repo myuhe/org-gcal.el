@@ -9,7 +9,9 @@
 - [[https://github.com/tkf/emacs-request][tkf/emacs-request]]
 - [[https://github.com/jwiegley/alert][jwiegley/alert]]
 
-  =org-gcal= is now available in the famous emacs package repo [[http://melpa.milkbox.net/][MELPA]], so the recommended way is to install it through Emacs package management system.
+  =org-gcal= is now available in the famous emacs package repo [[http://melpa.milkbox.net/][MELPA]],
+  so the recommended way is to install it through Emacs package
+  management system.
 
 * Installation
 
@@ -19,27 +21,40 @@
 
 3. Click on the project
 
-4. Click on *APIs & Auth* then *Credentials*
+4. Click on *APIs & Services* then *Credentials*
 
-5. Click on *Create New Client ID* with Application type /Installed application/, Installed application type /Other/
+5. Click on *Create Credentials* and *Oauth client ID* with
+   Application type /Installed application/, Installed application
+   type /Other/
 
 6. Click on *Create Client ID*
 
 7. Record the Client ID and Client secret for setup.
 
-8. Under the same *APIs & Auth* menu section, select *Library*
+8. Under the same *APIs & Services* menu section, select *Library*
 
-9. Scroll down to *Calendar API*. Click the *Status* button to enable calendar API access to the app you created in steps 5 & 6.
+9. Scroll down to *Calendar API*. Click the *Enable* button to enable
+   calendar API access to the app you created in steps 5 & 6.
 
    Go to [[https://www.google.com/calendar/render][Google setting page]] to check the calendar ID.
 
-10. Go to [[https://www.google.com/calendar/render][Google setting page]] and click the gear-shaped settings icon in the upper right, then select "Settings" from the drop down list.
+10. Go to [[https://www.google.com/calendar/render][Google setting page]] and click the gear-shaped settings icon
+    in the upper right, then select "Settings" from the drop down
+    list.
 
-11. Select the "Calendars" tab, which will display a list of your calendars.
+11. Select the "Setting for my Calendars" tab on the left, which will
+    display a list of your calendars.
 
-12. Select the calendar you would like to synchronize with. This will take you to the "Calendar Details" page for that calendar. Near the end is a section titled "Calendar Address". Following the XML, ICAL, and HTML tags, you will see your Calendar ID.
+12. Select the calendar you would like to synchronize with. This will
+    take you to the "Calendar Settings" page for that calendar. Near
+    the end is a section titled "Integrate Calendar". Following the XML,
+    ICAL, and HTML tags, you will see your Calendar ID.
 
-13. Copy the Calendar ID for use in the settings below, where you will use it as the first element in the org-gcal-file-alist for associating calendars with specific org files. You can associate different calendars with different org files, so repeat this for each calendar you want to use.
+13. Copy the Calendar ID for use in the settings below, where you will
+    use it as the first element in the org-gcal-file-alist for
+    associating calendars with specific org files. You can associate
+    different calendars with different org files, so repeat this for
+    each calendar you want to use.
 
 ** Setting example
 
@@ -56,13 +71,16 @@
 ** =org-gcal-sync=
    Sync between Org and Gcal. before syncing,  execute =org-gcal-fetch= .
 ** =org-gcal-fetch=
-   Fetch Google calendar events and populate =org-gcal-file-alist= locations. The org files in =org-gcal-file-alist= should be blank or all of their headlines should have timestamps.
+   Fetch Google calendar events and populate =org-gcal-file-alist=
+   locations. The org files in =org-gcal-file-alist= should be blank
+   or all of their headlines should have timestamps.
 ** =org-gcal-post-at-point=
    Post/edit org block at point to Google calendar.
 ** =org-gcal-delete-at-point=
    Delete Gcal event at point.
 ** =org-gcal-refresh-token=
-   Refresh the OAuth token. OAuth token expired in 3600 seconds, You should refresh token on a regular basis.
+   Refresh the OAuth token. OAuth token expired in 3600 seconds, You
+   should refresh token on a regular basis.
 
 * Similar application
   [[https://github.com/dengste/org-caldav][dengste/org-caldav]]
