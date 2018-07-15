@@ -576,7 +576,8 @@ TO.  Instead an empty string is returned."
   (org-gcal--iso-next-day str t))
 
 (defun org-gcal--cons-list (plst)
-  (let* ((smry  (plist-get plst :summary))
+  (let* ((smry  (or (plist-get plst :summary)
+                    "busy"))
          (desc  (plist-get plst :description))
          (loc   (plist-get plst :location))
          (link  (plist-get plst :htmlLink))
