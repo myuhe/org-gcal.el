@@ -90,12 +90,10 @@
   :group 'org-gcal
   :type '(alist :key-type (string :tag "Calendar Id") :value-type (file :tag "Org file")))
 
-(defcustom org-gcal-logo "org.png"
-  "org-gcal logo filename."
+(defcustom org-gcal-logo-file nil
+  "org-gcal logo image filename to display in notifications."
   :group 'org-gcal
-  :type `(choice  ,@(mapcar (lambda (c)
-                       `(const :tag ,c ,c))
-                            '("org.png" "emacs.png"))))
+  :type 'file)
 
 (defcustom org-gcal-fetch-event-filters '()
   "Predicate functions to filter calendar events.
@@ -760,27 +758,9 @@ beginning position."
 
 (defun org-gcal--notify (title mes)
   (when org-gcal-notify-p
-    (let ((file (expand-file-name (concat org-gcal-dir org-gcal-logo)))
-          (mes mes)
-          (title title))
-      (if (file-exists-p file)
-          (if (eq system-type 'gnu/linux)
-              (alert mes :title title :icon file)
-            (alert mes :title title))
-        (deferred:$
-          (deferred:url-retrieve (concat "https://raw.githubusercontent.com/myuhe/org-gcal.el/master/" org-gcal-logo))
-          (deferred:nextc it
-            (lambda (buf)
-              (with-current-buffer buf
-                (let ((tmp (substring (buffer-string) (+ (string-match "\n\n" (buffer-string)) 2))))
-                  (erase-buffer)
-                  (fundamental-mode)
-                  (insert tmp)
-                  (write-file file)))
-              (kill-buffer buf)
-              (if (eq system-type 'gnu/linux)
-                  (alert mes :title title :icon file)
-                (alert mes :title title)))))))))
+    (if org-gcal-logo-file
+        (alert mes :title title :icon file)
+      (alert mes :title title))))
 
 (defun org-gcal--time-to-seconds (plst)
   (time-to-seconds
