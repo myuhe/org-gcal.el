@@ -4,6 +4,8 @@
   - Post/edit org element
   - Sync between Org and Gcal
 
+Data will be UTF-8 encoded for sync.
+
 * Requirements
 
 - [[https://github.com/tkf/emacs-request][tkf/emacs-request]]
@@ -81,6 +83,23 @@
 ** =org-gcal-refresh-token=
    Refresh the OAuth token. OAuth token expired in 3600 seconds, You
    should refresh token on a regular basis.
+
+* Other features
+** Minimize alerts
+
+Modify =org-gcal-notify-p= from =t= to =nil=
+
+** Headers in org-gcal files
+   
+   Create variable org-gcal-header-alist
+
+#+begin_src elisp
+(setq org-gcal-header-alist '(("me@gmail.com" . "#+CATEGORY: personal\n")))
+#+end_src
+
+#+BEGIN_QUOTE
+I often need to set headers in org-mode files to control categories, archive locations, and other local variables. This patch allows for the insertion of arbitary headers. It creates a single alist variable (org-gcal-header-alist) and if it exists for a given file it inserts it before writing the calendar items.
+#+END_QUOTE
 
 * Similar application
   [[https://github.com/dengste/org-caldav][dengste/org-caldav]]
