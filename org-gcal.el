@@ -329,10 +329,17 @@
     (let* ((skip-import skip-import)
            (elem (org-element-headline-parser (point-max) t))
            (smry (org-element-property :title elem))
-           (id (org-element-property :ID elem)))
+           (id (org-element-property :ID elem))
+           (calendar (cdr
+                      (assoc
+                       (buffer-file-name (current-buffer))
+                       (mapcar
+                        (lambda (p)
+                          (cons (expand-file-name (cdr p)) (car p)))
+                        org-gcal-file-alist)))))
       (when (and id
                  (y-or-n-p (format "Do you really want to delete event?\n\n%s\n\n" smry)))
-        (org-gcal--delete-event id nil skip-import)))))
+        (org-gcal--delete-event calendar id nil skip-import)))))
 
 (defun org-gcal-request-authorization ()
   "Request OAuth authorization at AUTH-URL by launching `browse-url'.
@@ -395,7 +402,7 @@ It returns the code provided by the service."
                 ((eq fun 'org-gcal--post-event)
                  (org-gcal--post-event start end smry loc desc calendar id (plist-get token :access_token)))
                 ((eq fun 'org-gcal--delete-event)
-                 (org-gcal--delete-event id (plist-get token :access_token))))))))
+                 (org-gcal--delete-event calendar id (plist-get token :access_token))))))))
 
 ;; Internal
 (defun org-gcal--archive-old-event ()
@@ -674,12 +681,11 @@ TO.  Instead an empty string is returned."
                                      (concat "Org-gcal post event\n  " (plist-get data :summary)))
                      (unless skip-import (org-gcal-fetch))))))))
 
-(defun org-gcal--delete-event (event-id &optional a-token skip-import skip-export)
+(defun org-gcal--delete-event (calendar-id event-id &optional a-token skip-import skip-export)
   (let ((skip-import skip-import)
         (a-token (if a-token
                      a-token
-                   (org-gcal--get-access-token)))
-        (calendar-id (caar org-gcal-file-alist)))
+                   (org-gcal--get-access-token))))
     (request
      (concat
       (format org-gcal-events-url calendar-id)
