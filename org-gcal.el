@@ -189,14 +189,14 @@
                       ;; We got some 2xx response, but for some reason no
                       ;; message body.
                       ((and (> 299 status) (eq temp nil))
-                       (org-gcal--notify 
-                        (concat "Received HTTP" (number-to-string status)) 
+                       (org-gcal--notify
+                        (concat "Received HTTP" (number-to-string status))
                         "Error occured, but no message body."))
                       ((not (eq error-msg nil))
                        ;; Generic error-handler meant to provide useful
                        ;; information about failure cases not otherwise
                        ;; explicitly specified.
-                         (org-gcal--notify 
+                         (org-gcal--notify
                           (concat "Status code: " (number-to-string status))
                           (pp-to-string error-msg)))
                       ;; Fetch was successful.
@@ -415,7 +415,9 @@ It returns the code provided by the service."
                                              (plist-get tobj :month-end)
                                              (plist-get tobj :year-end))))
           (org-gcal--notify "Archived event." (org-element-property :title elem))
-          (org-archive-subtree))))
+          (let ((kill-ring kill-ring)
+                (select-enable-clipboard nil))
+            (org-archive-subtree)))))
     (save-buffer)))
 
 (defun org-gcal--save-sexp (data file)
@@ -452,7 +454,7 @@ It returns the code provided by the service."
           (progn
             (with-temp-buffer (insert-file-contents org-gcal-token-file)
                               (plist-get (plist-get (read (buffer-string)) :token) :refresh_token)))
-        (org-gcal--notify 
+        (org-gcal--notify
          (concat org-gcal-token-file " is not exists" )
          (concat "Make" org-gcal-token-file))))))
 
@@ -464,7 +466,7 @@ It returns the code provided by the service."
           (progn
             (with-temp-buffer (insert-file-contents org-gcal-token-file)
                               (plist-get (plist-get (read (buffer-string)) :token) :access_token)))
-        (org-gcal--notify 
+        (org-gcal--notify
          (concat org-gcal-token-file " is not exists" )
          (concat "Make " org-gcal-token-file))))))
 
