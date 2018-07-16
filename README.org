@@ -4,6 +4,8 @@
   - Post/edit org element
   - Sync between Org and Gcal
 
+Data will be UTF-8 encoded for sync.
+
 * Requirements
 
 - [[https://github.com/tkf/emacs-request][tkf/emacs-request]]
