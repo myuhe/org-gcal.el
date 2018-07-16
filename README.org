@@ -83,7 +83,8 @@
    should refresh token on a regular basis.
 
 * Other features
- ** =org headers in org-gcal files=
+** Headers in org-gcal files
+   
    Create variable org-gcal-header-alist
 
 #+begin_src elisp
@@ -91,9 +92,7 @@
 #+end_src
 
 #+BEGIN_QUOTE
-I often need to set headers in org-mode files to control categories, archive locations, and other local variables. This patch allows for the insertion of arbitary headers.
-
-It creates a single alist variable (org-gcal-header-alist) and if it exists for a given file it inserts it before writing the calendar items.
+I often need to set headers in org-mode files to control categories, archive locations, and other local variables. This patch allows for the insertion of arbitary headers. It creates a single alist variable (org-gcal-header-alist) and if it exists for a given file it inserts it before writing the calendar items.
 #+END_QUOTE
 
 * Similar application
