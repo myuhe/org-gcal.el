@@ -83,6 +83,10 @@
    should refresh token on a regular basis.
 
 * Other features
+** Minimize alerts
+
+Modify =org-gcal-notify-p= from =t= to =nil=
+
 ** Headers in org-gcal files
    
    Create variable org-gcal-header-alist
