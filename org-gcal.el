@@ -86,18 +86,18 @@
   :type 'string)
 
 (defcustom org-gcal-file-alist nil
-  "list of association '(calendar-id file) to synchronize at once for calendar id."
+  "List of association '(calendar-id file) to synchronize at once for calendar id."
   :group 'org-gcal
   :type '(alist :key-type (string :tag "Calendar Id") :value-type (file :tag "Org file")))
 
 (defcustom org-gcal-logo-file nil
-  "org-gcal logo image filename to display in notifications."
+  "Org-gcal logo image filename to display in notifications."
   :group 'org-gcal
   :type 'file)
 
 (defcustom org-gcal-fetch-event-filters '()
   "Predicate functions to filter calendar events.
-   Predicate functions take an event, and if they return `nil' the
+Predicate functions take an event, and if they return nil the
    event will not be fetched."
   :group 'org-gcal
   :type 'list)
@@ -108,10 +108,10 @@
   :type 'boolean)
 
 (defvar org-gcal-token-plist nil
-  "token plist.")
+  "Token plist.")
 
 (defvar org-gcal-icon-list '("org.png" "emacs.png")
-  "icon file name list.")
+  "Icon file name list.")
 
 (defvar org-gcal-header-alist ())
 
@@ -129,6 +129,9 @@
 (defconst org-gcal-events-url "https://www.googleapis.com/calendar/v3/calendars/%s/events")
 
 (defun org-gcal-sync (&optional a-token skip-export silent)
+  "Import events from calendars.
+Using A-TOKEN and export the ones to the calendar if unless
+SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
   (interactive)
   (org-gcal--ensure-token)
   (when org-gcal-auto-archive
@@ -250,9 +253,9 @@
   (org-gcal-sync nil t))
 
 (defun org-gcal--filter (items)
-  "If `org-gcal-fetch-event-filters' has a list of functions,
-   run each item through all of the filters. If any filter returns
-   `nil', discard the item."
+  "Filter ITEMS on an AND of `org-gcal-fetch-event-filters' functions.
+Run each element from ITEMS through all of the filters.  If any
+filter returns NIL, discard the item."
   (if org-gcal-fetch-event-filters
       (cl-remove-if
        (lambda (item)
@@ -264,14 +267,14 @@
     items))
 
 (defun org-gcal--headline-list (file)
-  "DOCSTRING"
+  "Return positions for all headlines of FILE."
   (let ((buf (find-file-noselect file)))
     (with-current-buffer buf
       (org-element-map (org-element-parse-buffer) 'headline
                               (lambda (hl) (org-element-property :begin hl))))))
 
 (defun org-gcal--parse-id (file)
-  "DOCSTRING"
+  "Return a list of conses (ID . entry) of file FILE."
   (let ((buf (find-file-noselect file)))
     (with-current-buffer buf
       (save-excursion
@@ -287,6 +290,9 @@
                                   (lambda (hl) (org-element-property :end hl)))))))))))
 
 (defun org-gcal-post-at-point (&optional skip-import)
+  "Post entry at point to current calendar.
+If SKIP-IMPORT is not nil, do not import events from the
+current calendar."
   (interactive)
   (org-gcal--ensure-token)
   (save-excursion
@@ -329,6 +335,9 @@
       (org-gcal--post-event start end smry loc desc id nil skip-import))))
 
 (defun org-gcal-delete-at-point (&optional skip-import)
+  "Delete entry at point to current calendar.
+If SKIP-IMPORT is not nil, do not import events from the
+current calendar."
   (interactive)
   (org-gcal--ensure-token)
   (save-excursion
@@ -354,7 +363,7 @@ It returns the code provided by the service."
   (read-string "Enter the code your browser displayed: "))
 
 (defun org-gcal-request-token ()
-  "Request OAuth access at TOKEN-URL."
+  "Refresh OAuth access at TOKEN-URL."
   (request
    org-gcal-token-url
    :type "POST"
@@ -374,7 +383,9 @@ It returns the code provided by the service."
                 (message "Got error: %S" error-thrown)))))
 
 (defun org-gcal-refresh-token (&optional fun skip-export start end smry loc desc id)
-  "Refresh OAuth access at TOKEN-URL."
+  "Refresh OAuth access and call FUN after that.
+Pass SKIP-EXPORT, START, END, SMRY, LOC, DESC.  and ID to FUN if
+needed."
   (interactive)
     (deferred:$
       (request-deferred
@@ -479,8 +490,8 @@ It returns the code provided by the service."
          (concat "Make " org-gcal-token-file))))))
 
 (defun org-gcal--safe-substring (string from &optional to)
-  "Calls the `substring' function safely.
-\nNo errors will be returned for out of range values of FROM and
+  "Call the `substring' function safely.
+No errors will be returned for out of range values of FROM and
 TO.  Instead an empty string is returned."
   (let* ((len (length string))
          (to (or to len)))
