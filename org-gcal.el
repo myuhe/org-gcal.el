@@ -109,9 +109,6 @@ Predicate functions take an event, and if they return nil the
 (defvar org-gcal-token-plist nil
   "Token plist.")
 
-(defvar org-gcal-icon-list '("org.png" "emacs.png")
-  "Icon file name list.")
-
 (defvar org-gcal-header-alist ())
 
 (defconst org-gcal-auth-url "https://accounts.google.com/o/oauth2/auth"
@@ -122,8 +119,6 @@ Predicate functions take an event, and if they return nil the
 
 (defconst org-gcal-resource-url "https://www.googleapis.com/auth/calendar"
   "URL used to request access to calendar resources.")
-
-(defconst org-gcal-key-url (concat "?key=" org-gcal-client-secret))
 
 (defconst org-gcal-events-url "https://www.googleapis.com/calendar/v3/calendars/%s/events")
 
