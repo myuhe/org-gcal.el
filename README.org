@@ -109,5 +109,12 @@ Modify =org-gcal-notify-p= from =t= to =nil=
 I often need to set headers in org-mode files to control categories, archive locations, and other local variables. This patch allows for the insertion of arbitary headers. It creates a single alist variable (org-gcal-header-alist) and if it exists for a given file it inserts it before writing the calendar items.
 #+END_QUOTE
 
+* Error
+** I get "Org-gcal error: Couldn't parse your-cal.org"
+   The org file where you sync the calendar must have all entries with
+   timestamps and a particular format to be parsed correctly. When
+   synching for the first time, we recommend is to use a blank file
+   and continue from that.
+
 * Similar application
   [[https://github.com/dengste/org-caldav][dengste/org-caldav]]
