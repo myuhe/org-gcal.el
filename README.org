@@ -68,6 +68,14 @@ Data will be UTF-8 encoded for sync.
                             ("another-mail@gmail.com" .  "~/task.org")))
 #+end_src
 
+** Multiple accounts
+
+   There's no support for multiple accounts.  If w to use org-gcal
+   with calendars from different accounts, you can give permissions to
+   those the you configured org-gcal with via google calendar's
+   settings interface.
+
+   To get more detailed information you can [[https://digibites.zendesk.com/hc/en-us/articles/200299863-How-do-I-share-my-calendar-with-someone-else-Google-Calendar-or-Outlook-com-][check this link]].
 
 * Usage
 ** =org-gcal-sync=
@@ -90,7 +98,7 @@ Data will be UTF-8 encoded for sync.
 Modify =org-gcal-notify-p= from =t= to =nil=
 
 ** Headers in org-gcal files
-   
+
    Create variable org-gcal-header-alist
 
 #+begin_src elisp
