@@ -647,6 +647,15 @@ TO.  Instead an empty string is returned."
 (defun org-gcal--param-date-alt (str)
   (if (< 11 (length str)) "date" "dateTime"))
 
+(defun org-gcal--get-calendar-id-of-buffer ()
+  "Find calendar id of current buffer."
+  (or (cl-loop for (id . file) in org-gcal-file-alist
+               if (file-equal-p file (buffer-file-name))
+               return id)
+      (user-error (concat "Buffer `%s' may not related to google calendar; "
+                          "please check/configure `org-gcal-file-alist'")
+                  (buffer-name))))
+
 (defun org-gcal--post-event (start end smry loc desc &optional id a-token skip-import skip-export)
   (let ((stime (org-gcal--param-date start))
         (etime (org-gcal--param-date end))
@@ -657,7 +666,7 @@ TO.  Instead an empty string is returned."
                    (org-gcal--get-access-token))))
     (request
      (concat
-      (format org-gcal-events-url (car (car org-gcal-file-alist)))
+      (format org-gcal-events-url (org-gcal--get-calendar-id-of-buffer))
       (when id
         (concat "/" id)))
      :type (if id "PATCH" "POST")
@@ -703,7 +712,7 @@ TO.  Instead an empty string is returned."
         (a-token (if a-token
                      a-token
                    (org-gcal--get-access-token)))
-        (calendar-id (caar org-gcal-file-alist)))
+        (calendar-id (org-gcal--get-calendar-id-of-buffer)))
     (request
      (concat
       (format org-gcal-events-url calendar-id)
