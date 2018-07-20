@@ -1,11 +1,10 @@
 ;;; org-gcal.el --- Org sync with Google Calendar -*- lexical-binding: t -*-
 
 ;; Author: myuhe <yuhei.maeda_at_gmail.com>
-;; URL: https://github.com/myuhe/org-gcal.el
-;; Version: 0.2
-;; Maintainer: myuhe
+;; URL: https://github.com/kidd/org-gcal.el
+;; Version: 0.3
+;; Maintainer: Raimon Grau <raimonster@gmail.com>
 ;; Copyright (C) :2014 myuhe all rights reserved.
-;; Created: :14-01-03
 ;; Package-Requires: ((request-deferred "0.2.0") (alert "1.1") (emacs "24") (cl-lib "0.5") (org "8.2.4"))
 ;; Keywords: convenience,
 
