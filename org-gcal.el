@@ -421,7 +421,10 @@ needed."
   (save-excursion
     (goto-char (point-min))
     (while (re-search-forward org-heading-regexp nil t)
-      (goto-char (cdr (org-gcal--timestamp-successor)))
+      (condition-case nil
+          (goto-char (cdr (org-gcal--timestamp-successor)))
+        (error (error "Org-gcal error: Couldn't parse %s"
+                      (buffer-file-name))))
       (let ((elem (org-element-headline-parser (point-max) t))
             (tobj (cadr (org-element-timestamp-parser))))
         (when (>
