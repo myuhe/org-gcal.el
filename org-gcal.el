@@ -776,11 +776,12 @@ beginning position."
            nil t)
       (cons 'timestamp (match-beginning 0)))))
 
-(defun org-gcal--notify (title mes)
+(defun org-gcal--notify (title message)
+  "Send alert with TITLE and MESSAGE."
   (when org-gcal-notify-p
     (if org-gcal-logo-file
-        (alert mes :title title :icon file)
-      (alert mes :title title))))
+        (alert message :title title :icon org-gcal-logo-file)
+      (alert message :title title))))
 
 (defun org-gcal--time-to-seconds (plst)
   (time-to-seconds
