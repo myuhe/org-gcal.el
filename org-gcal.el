@@ -334,22 +334,19 @@ current calendar."
 				  (plist-get (cadr elem) :contents-end))))) "")))
       (org-gcal--post-event start end smry loc desc id nil skip-import))))
 
-(defun org-gcal-delete-at-point (&optional skip-import)
-  "Delete entry at point to current calendar.
-If SKIP-IMPORT is not nil, do not import events from the
-current calendar."
+(defun org-gcal-delete-at-point ()
+  "Delete entry at point to current calendar."
   (interactive)
   (org-gcal--ensure-token)
   (save-excursion
     (end-of-line)
     (org-back-to-heading)
-    (let* ((skip-import skip-import)
-           (elem (org-element-headline-parser (point-max) t))
+    (let* ((elem (org-element-headline-parser (point-max) t))
            (smry (org-element-property :title elem))
            (id (org-element-property :ID elem)))
       (when (and id
                  (y-or-n-p (format "Do you really want to delete event?\n\n%s\n\n" smry)))
-        (org-gcal--delete-event id nil skip-import)))))
+        (org-gcal--delete-event id)))))
 
 (defun org-gcal-request-authorization ()
   "Request OAuth authorization at AUTH-URL by launching `browse-url'.
@@ -707,9 +704,8 @@ TO.  Instead an empty string is returned."
                                      (concat "Org-gcal post event\n  " (plist-get data :summary)))
                      (unless skip-import (org-gcal-fetch))))))))
 
-(defun org-gcal--delete-event (event-id &optional a-token skip-import skip-export)
-  (let ((skip-import skip-import)
-        (a-token (if a-token
+(defun org-gcal--delete-event (event-id &optional a-token)
+  (let ((a-token (if a-token
                      a-token
                    (org-gcal--get-access-token)))
         (calendar-id (org-gcal--get-calendar-id-of-buffer)))
@@ -732,13 +728,13 @@ TO.  Instead an empty string is returned."
                      (org-gcal--notify
                       "Received HTTP 401"
                       "OAuth token expired. Now trying to refresh-token")
-                     (org-gcal-refresh-token 'org-gcal--delete-event skip-export nil nil nil nil nil event-id)))
+                     (org-gcal-refresh-token 'org-gcal--delete-event nil nil nil nil nil nil event-id)))
                   (t
                    (org-gcal--notify
                     (concat "Status code: " (pp-to-string status))
                     (pp-to-string error-msg)))))))
      :success (cl-function
-               (lambda (&key data &allow-other-keys)
+               (lambda (&key &allow-other-keys)
                  (progn
                    (org-gcal-fetch)
                    (org-gcal--notify "Event Deleted" "Org-gcal deleted event")))))))
