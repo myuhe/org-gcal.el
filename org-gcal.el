@@ -128,6 +128,7 @@ Predicate functions take an event, and if they return nil the
 
 (defconst org-gcal-events-url "https://www.googleapis.com/calendar/v3/calendars/%s/events")
 
+;;;###autoload
 (defun org-gcal-sync (&optional a-token skip-export silent)
   "Import events from calendars.
 Using A-TOKEN and export the ones to the calendar if unless
@@ -247,6 +248,7 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                        (unless silent
                        (org-gcal--notify "Completed event fetching ." (concat "Fetched data overwrote\n" (cdr x)))))))))))))
 
+;;;###autoload
 (defun org-gcal-fetch ()
   "Fetch event data from google calendar."
   (interactive)
@@ -289,6 +291,7 @@ filter returns NIL, discard the item."
                                 (car (org-element-map (org-element-at-point) 'headline
                                   (lambda (hl) (org-element-property :end hl)))))))))))
 
+;;;###autoload
 (defun org-gcal-post-at-point (&optional skip-import)
   "Post entry at point to current calendar.
 If SKIP-IMPORT is not nil, do not import events from the
@@ -334,6 +337,7 @@ current calendar."
 				  (plist-get (cadr elem) :contents-end))))) "")))
       (org-gcal--post-event start end smry loc desc id nil skip-import))))
 
+;;;###autoload
 (defun org-gcal-delete-at-point ()
   "Delete entry at point to current calendar."
   (interactive)
@@ -383,7 +387,6 @@ It returns the code provided by the service."
   "Refresh OAuth access and call FUN after that.
 Pass SKIP-EXPORT, START, END, SMRY, LOC, DESC.  and ID to FUN if
 needed."
-  (interactive)
     (deferred:$
       (request-deferred
        org-gcal-token-url
