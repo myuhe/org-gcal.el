@@ -555,17 +555,15 @@ TO.  Instead an empty string is returned."
 
 (defun org-gcal--format-org2iso (year mon day &optional hour min tz)
   (let ((seconds (time-to-seconds (encode-time 0
-                                               (if min min 0)
-                                               (if hour hour 0)
+                                               (or min 0)
+                                               (or hour 0)
                                                day mon year))))
-    (concat
-     (format-time-string
-      (if (or hour min) "%Y-%m-%dT%H:%M" "%Y-%m-%d")
-      (seconds-to-time
-       (-
-        seconds
-        (if tz (car (org-gcal--time-zone seconds)) 0))))
-     (when (or hour min) ":00Z"))))
+    (format-time-string
+     (if (or hour min) "%Y-%m-%dT%H:%M:00Z" "%Y-%m-%d")
+     (seconds-to-time
+      (-
+       seconds
+       (if tz (car (org-gcal--time-zone seconds)) 0))))))
 
 (defun org-gcal--iso-next-day (str &optional previous-p)
   (let ((format (if (< 11 (length str))
