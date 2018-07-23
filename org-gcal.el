@@ -106,10 +106,19 @@ Predicate functions take an event, and if they return nil the
   :group 'org-gcal
   :type 'boolean)
 
+(defcustom org-gcal-header-alist ()
+  "\
+Association list of '(calendar-id header). For each calendar-id present in this
+list, the associated header will be inserted at the top of the file associated
+with the calendar-id in org-gcal-file-alist, before any calendar entries.
+
+This is intended to set headers in the org-mode files maintained by org-gcal to
+control categories, archive locations, and other local variables."
+  :group 'org-gcal
+  :type '(alist :key-type (string :tag "Calendar Id") :value-type (string :tag "Header")))
+
 (defvar org-gcal-token-plist nil
   "Token plist.")
-
-(defvar org-gcal-header-alist ())
 
 (defconst org-gcal-auth-url "https://accounts.google.com/o/oauth2/auth"
   "Google OAuth2 server URL.")
