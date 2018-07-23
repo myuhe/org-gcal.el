@@ -3,9 +3,9 @@
   - Fetch google calendar event
   - Post/edit org element
   - Sync between Org and Gcal
-    
+
 * Requirements
- 
+
 - [[https://github.com/tkf/emacs-request][tkf/emacs-request]]
 - [[https://github.com/jwiegley/alert][jwiegley/alert]]
 
