@@ -246,9 +246,14 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                              (with-temp-file org-gcal-token-file
                                (pp (plist-put plst
                                               (intern (concat ":" (car x)))
-                                              (mapcar (lambda (lst (cons (plist-get lst :id) (org-gcal--cons-list lst)) items)) (current-buffer))))
-                               (org-set-startup-visibility)
-                               (save-buffer)))))
+                                              (mapcar
+                                               (lambda (lst)
+                                                       (cons (plist-get lst :id)
+                                                             (org-gcal--cons-list lst)))
+                                               items))
+                                   (current-buffer)))))
+                         (org-set-startup-visibility)
+                         (save-buffer))
                        (unless silent
                          (org-gcal--notify "Completed event fetching ."
                                            (concat "Fetched data overwrote\n" (cdr x)))))))))))))
