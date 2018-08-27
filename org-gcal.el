@@ -665,7 +665,7 @@ TO.  Instead an empty string is returned."
 (defun org-gcal--get-calendar-id-of-buffer ()
   "Find calendar id of current buffer."
   (or (cl-loop for (id . file) in org-gcal-file-alist
-               if (file-equal-p file (buffer-file-name))
+               if (file-equal-p file (buffer-file-name (buffer-base-buffer)))
                return id)
       (user-error (concat "Buffer `%s' may not related to google calendar; "
                           "please check/configure `org-gcal-file-alist'")
