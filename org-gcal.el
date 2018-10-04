@@ -616,6 +616,7 @@ TO.  Instead an empty string is returned."
                            :date))
          (start (if stime stime sday))
          (end   (if etime etime eday)))
+    (when loc (replace-regexp-in-string "\n" ", " loc))
     (concat
      "* " smry "\n"
      "  :PROPERTIES:\n"
