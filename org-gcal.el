@@ -314,7 +314,7 @@
                       (replace-regexp-in-string
                        "\\`\\(?: *<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*?>$\\)\n?\n?" ""
                        (replace-regexp-in-string
-                        " *:PROPERTIES:\n  \\(.*\\(?:\n.*\\)*?\\) :END:\n\n" ""
+                        " *:PROPERTIES:\n *\\(.*\\(?:\n.*\\)*?\\) *:END:\n+" ""
                         (buffer-substring-no-properties
                          (plist-get (cadr elem) :contents-begin)
                          (plist-get (cadr elem) :contents-end)))) "")))
