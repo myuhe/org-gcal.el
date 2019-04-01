@@ -605,6 +605,7 @@ TO.  Instead an empty string is returned."
          (desc  (plist-get plst :description))
          (loc   (plist-get plst :location))
          (link  (plist-get plst :htmlLink))
+         (meet  (plist-get plst :hangoutLink))
          (id    (plist-get plst :id))
          (stime (plist-get (plist-get plst :start)
                            :dateTime))
@@ -622,6 +623,11 @@ TO.  Instead an empty string is returned."
      "  :PROPERTIES:\n"
      (when loc "  :LOCATION: ") loc (when loc "\n")
      "  :LINK: ""[[" link "][Go to gcal web page]]\n"
+     (when meet
+       (format "  %s [[%s][%s]]\n"
+               ":HANGOUTS:"
+               meet
+               "Join Hangouts Meet"))
      "  :ID: " id "\n"
      "  :END:\n"
      (if (or (string= start end) (org-gcal--alldayp start end))
