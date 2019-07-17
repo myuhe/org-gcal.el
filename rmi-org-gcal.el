@@ -117,6 +117,12 @@ control categories, archive locations, and other local variables."
   :group 'rmi-org-gcal
   :type '(alist :key-type (string :tag "Calendar Id") :value-type (string :tag "Header")))
 
+(defcustom rmi-org-gcal-property 'org-gcal
+  "\
+Org-mode property to be set on all entries that should be handled by rmi-org-gcal."
+  :group 'rmi-org-gcal
+  :type 'symbol)
+
 (defvar rmi-org-gcal-token-plist nil
   "Token plist.")
 
@@ -621,6 +627,7 @@ TO.  Instead an empty string is returned."
     (concat
      "* " smry "\n"
      "  :PROPERTIES:\n"
+     "  :" (symbol-name rmi-org-gcal-property) ": t\n"
      (when loc "  :LOCATION: ") loc (when loc "\n")
      "  :LINK: ""[[" link "][Go to gcal web page]]\n"
      (when meet
