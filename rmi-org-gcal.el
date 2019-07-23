@@ -117,11 +117,23 @@ control categories, archive locations, and other local variables."
   :group 'rmi-org-gcal
   :type '(alist :key-type (string :tag "Calendar Id") :value-type (string :tag "Header")))
 
-(defcustom rmi-org-gcal-property 'org-gcal
+(defcustom rmi-org-gcal-property "org-gcal"
   "\
 Org-mode property to be set on all entries that should be handled by rmi-org-gcal."
   :group 'rmi-org-gcal
-  :type 'symbol)
+  :type 'string)
+
+(defcustom rmi-org-gcal-calendar-id-property "calendar-id"
+  "\
+Org-mode property on org-gcal entries that records the Calendar ID."
+  :group 'rmi-org-gcal
+  :type 'string)
+
+(defcustom rmi-org-gcal-etag-property "ETag"
+  "\
+Org-mode property on org-gcal entries that records the ETag."
+  :group 'rmi-org-gcal
+  :type 'string)
 
 (defvar rmi-org-gcal-token-plist nil
   "Token plist.")
