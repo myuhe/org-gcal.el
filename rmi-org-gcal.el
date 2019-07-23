@@ -254,22 +254,15 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                          (let ((items (rmi-org-gcal--filter (plist-get (request-response-data response) :items))))
                            (when (assoc (car x) rmi-org-gcal-header-alist)
                              (insert (cdr (assoc (car x) rmi-org-gcal-header-alist))))
-                           (insert
-                            (mapconcat 'identity
-                                       (mapcar (lambda (lst) (rmi-org-gcal--cons-list lst))
-                                               items)
-                                       ""))
+                           (mapcar
+                            (lambda (lst)
+                              (insert "* ")
+                              (rmi-org-gcal--update-entry (car x) lst))
+                            items)
                            (let ((plst (with-temp-buffer (insert-file-contents rmi-org-gcal-token-file)
                                                          (read (buffer-string)))))
                              (with-temp-file rmi-org-gcal-token-file
-                               (pp (plist-put plst
-                                              (intern (concat ":" (car x)))
-                                              (mapcar
-                                               (lambda (lst)
-                                                       (cons (plist-get lst :id)
-                                                             (rmi-org-gcal--cons-list lst)))
-                                               items))
-                                   (current-buffer)))))
+                               (pp plst (current-buffer)))))
                          (org-set-startup-visibility)
                          (save-buffer))
                        (unless silent
@@ -623,13 +616,21 @@ TO.  Instead an empty string is returned."
 (defun rmi-org-gcal--iso-previous-day (str)
   (rmi-org-gcal--iso-next-day str t))
 
-(defun rmi-org-gcal--cons-list (plst)
+(defun rmi-org-gcal--update-entry (calendar-id plst)
+  "\
+Update the entry at the current heading with information from PLST, which is
+parsed from the Calendar API JSON response using
+‘rmi-org-gcal--json-read’. Point must be located on an Org-mode heading line or
+an error will be thrown. Point is not preserved."
+  (unless (org-at-heading-p)
+    (user-error "Must be on Org-mode heading."))
   (let* ((smry  (or (plist-get plst :summary)
                     "busy"))
          (desc  (plist-get plst :description))
          (loc   (plist-get plst :location))
          (link  (plist-get plst :htmlLink))
          (meet  (plist-get plst :hangoutLink))
+         (etag (plist-get plst :etag))
          (id    (plist-get plst :id))
          (stime (plist-get (plist-get plst :start)
                            :dateTime))
@@ -642,42 +643,49 @@ TO.  Instead an empty string is returned."
          (start (if stime stime sday))
          (end   (if etime etime eday)))
     (when loc (replace-regexp-in-string "\n" ", " loc))
-    (concat
-     "* " smry "\n"
-     "  :PROPERTIES:\n"
-     "  :" (symbol-name rmi-org-gcal-property) ": t\n"
-     (when loc "  :LOCATION: ") loc (when loc "\n")
-     "  :LINK: ""[[" link "][Go to gcal web page]]\n"
-     (when meet
-       (format "  %s [[%s][%s]]\n"
-               ":HANGOUTS:"
+    (org-edit-headline smry)
+    (org-entry-put (point) rmi-org-gcal-property "t")
+    (org-entry-put (point) rmi-org-gcal-etag-property etag)
+    (when loc (org-entry-put (point) "LOCATION" loc))
+    (when meet
+      (org-entry-put
+       (point)
+       "HANGOUTS"
+       (format "[[%s][%s]]"
                meet
-               "Join Hangouts Meet"))
-     "  :ID: " id "\n"
-     "  :END:\n"
-     (if (or (string= start end) (rmi-org-gcal--alldayp start end))
-         (concat "\n  "(rmi-org-gcal--format-iso2org start))
-       (if (and
-            (= (plist-get (rmi-org-gcal--parse-date start) :year)
-               (plist-get (rmi-org-gcal--parse-date end)   :year))
-            (= (plist-get (rmi-org-gcal--parse-date start) :mon)
-               (plist-get (rmi-org-gcal--parse-date end)   :mon))
-            (= (plist-get (rmi-org-gcal--parse-date start) :day)
-               (plist-get (rmi-org-gcal--parse-date end)   :day)))
-           (concat "\n  <"
-                   (rmi-org-gcal--format-date start "%Y-%m-%d %a %H:%M")
-                   "-"
-                   (rmi-org-gcal--format-date end "%H:%M")
-                   ">")
-         (concat "\n  " (rmi-org-gcal--format-iso2org start)
-                 "--"
-                 (rmi-org-gcal--format-iso2org
-                  (if (< 11 (length end))
-                      end
-                    (rmi-org-gcal--iso-previous-day end)))))) "\n"
-     (when desc "\n")
-     (when desc (replace-regexp-in-string "^\*" "✱" desc))
-     (when desc (if (string= "\n" (rmi-org-gcal--safe-substring desc -1)) "" "\n")))))
+               "Join Hangouts Meet")))
+    (org-entry-put (point) rmi-org-gcal-calendar-id-property calendar-id)
+    (org-entry-put (point) "ID" id)
+    ;; Insert event time at end of current entry.
+    (unless (outline-next-heading)
+      (goto-char (point-max))
+      (newline))
+    (if (or (string= start end) (rmi-org-gcal--alldayp start end))
+        (insert (rmi-org-gcal--format-iso2org start))
+      (if (and
+           (= (plist-get (rmi-org-gcal--parse-date start) :year)
+              (plist-get (rmi-org-gcal--parse-date end)   :year))
+           (= (plist-get (rmi-org-gcal--parse-date start) :mon)
+              (plist-get (rmi-org-gcal--parse-date end)   :mon))
+           (= (plist-get (rmi-org-gcal--parse-date start) :day)
+              (plist-get (rmi-org-gcal--parse-date end)   :day)))
+          (insert "<"
+                  (rmi-org-gcal--format-date start "%Y-%m-%d %a %H:%M")
+                  "-"
+                  (rmi-org-gcal--format-date end "%H:%M")
+                  ">")
+        (insert (rmi-org-gcal--format-iso2org start)
+                "--"
+                (rmi-org-gcal--format-iso2org
+                 (if (< 11 (length end))
+                     end
+                   (rmi-org-gcal--iso-previous-day end))))))
+    (newline)
+    ;; Insert event description if present.
+    (when desc
+      (newline)
+      (insert (replace-regexp-in-string "^\*" "✱" desc))
+      (insert (if (string= "\n" (rmi-org-gcal--safe-substring desc -1)) "" "\n")))))
 
 (defun rmi-org-gcal--format-date (str format &optional tz)
   (let* ((plst (rmi-org-gcal--parse-date str))
