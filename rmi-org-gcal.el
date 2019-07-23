@@ -308,6 +308,12 @@ filter returns NIL, discard the item."
                                  (org-element-map (org-element-at-point) 'headline
                                    (lambda (hl) (org-element-property :end hl)))))))))))
 
+(defun rmi-org-gcal--property-from-name (name)
+  "\
+Converts property names (as strings) to a symbol suitable for use as the
+PROPERTY argument to ‘org-element-property’."
+  (intern (concat ":" (upcase name))))
+
 ;;;###autoload
 (defun rmi-org-gcal-post-at-point (&optional skip-import)
   "Post entry at point to current calendar.
