@@ -330,6 +330,7 @@ current calendar."
     (end-of-line)
     (org-back-to-heading)
     (let* ((skip-import skip-import)
+           (marker (point-marker))
            (elem (org-element-headline-parser (point-max) t))
            (tobj (progn (re-search-forward "<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"
                                            (save-excursion (outline-next-heading) (point)))
@@ -338,6 +339,13 @@ current calendar."
            (smry (org-element-property :title elem))
            (loc (org-element-property :LOCATION elem))
            (id (org-element-property :ID elem))
+           (etag (org-element-property
+                  (rmi-org-gcal--property-from-name rmi-org-gcal-etag-property)
+                  elem))
+           (calendar-id
+            (org-element-property
+             (rmi-org-gcal--property-from-name rmi-org-gcal-calendar-id-property)
+             elem))
            (start (rmi-org-gcal--format-org2iso
                    (plist-get (cadr tobj) :year-start)
                    (plist-get (cadr tobj) :month-start)
@@ -366,7 +374,8 @@ current calendar."
                                                   (plist-get (cadr elem) :contents-begin)
                                                   (plist-get (cadr elem) :contents-end)))))
                    "")))
-      (rmi-org-gcal--post-event start end smry loc desc id nil skip-import))))
+      (message "ETag %S" etag)
+      (rmi-org-gcal--post-event start end smry loc desc calendar-id marker etag id nil skip-import))))
 
 ;;;###autoload
 (defun rmi-org-gcal-delete-at-point ()
@@ -378,10 +387,14 @@ current calendar."
     (org-back-to-heading)
     (let* ((elem (org-element-headline-parser (point-max) t))
            (smry (org-element-property :title elem))
+           (calendar-id
+            (org-element-property
+             (rmi-org-gcal--property-from-name rmi-org-gcal-calendar-id-property)
+             elem))
            (id (org-element-property :ID elem)))
       (when (and id
                  (y-or-n-p (format "Do you really want to delete event?\n\n%s\n\n" smry)))
-        (rmi-org-gcal--delete-event id)))))
+        (rmi-org-gcal--delete-event calendar-id id)))))
 
 (defun rmi-org-gcal-request-authorization ()
   "Request OAuth authorization at AUTH-URL by launching `browse-url'.
@@ -414,7 +427,7 @@ It returns the code provided by the service."
    (cl-function (lambda (&key error-thrown &allow-other-keys)
                   (message "Got error: %S" error-thrown)))))
 
-(defun rmi-org-gcal-refresh-token (&optional fun skip-export start end smry loc desc id)
+(defun rmi-org-gcal-refresh-token (&optional fun skip-export start end smry loc desc marker calendar-id etag id)
   "Refresh OAuth access and call FUN after that.
 Pass SKIP-EXPORT, START, END, SMRY, LOC, DESC.  and ID to FUN if
 needed."
@@ -443,9 +456,10 @@ needed."
         (cond ((eq fun 'rmi-org-gcal-sync)
                (rmi-org-gcal-sync (plist-get token :access_token) skip-export))
               ((eq fun 'rmi-org-gcal--post-event)
-               (rmi-org-gcal--post-event start end smry loc desc id (plist-get token :access_token)))
+               (rmi-org-gcal--post-event
+                start end smry loc desc marker calendar-id etag id (plist-get token :access_token)))
               ((eq fun 'rmi-org-gcal--delete-event)
-               (rmi-org-gcal--delete-event id (plist-get token :access_token))))))))
+               (rmi-org-gcal--delete-event calendar-id id (plist-get token :access_token))))))))
 
 ;; Internal
 (defun rmi-org-gcal--archive-old-event ()
@@ -711,7 +725,7 @@ an error will be thrown. Point is not preserved."
                           "please check/configure `rmi-org-gcal-file-alist'")
                   (buffer-name))))
 
-(defun rmi-org-gcal--post-event (start end smry loc desc &optional id a-token skip-import skip-export)
+(defun rmi-org-gcal--post-event (start end smry loc desc calendar-id marker &optional etag id a-token skip-import skip-export)
   (let ((stime (rmi-org-gcal--param-date start))
         (etime (rmi-org-gcal--param-date end))
         (stime-alt (rmi-org-gcal--param-date-alt start))
@@ -721,11 +735,14 @@ an error will be thrown. Point is not preserved."
                    (rmi-org-gcal--get-access-token))))
     (request
      (concat
-      (format rmi-org-gcal-events-url (rmi-org-gcal--get-calendar-id-of-buffer))
+      (format rmi-org-gcal-events-url calendar-id)
       (when id
         (concat "/" id)))
      :type (if id "PATCH" "POST")
-     :headers '(("Content-Type" . "application/json"))
+     :headers (append
+               '(("Content-Type" . "application/json"))
+               (if (null etag) nil
+                 `(("If-Match" . ,etag))))
      :data (encode-coding-string
             (json-encode `(("start" (,stime . ,start) (,stime-alt . nil))
                            ("end" (,etime . ,(if (equal "date" etime)
@@ -750,7 +767,14 @@ an error will be thrown. Point is not preserved."
                      (rmi-org-gcal--notify
                       "Received HTTP 401"
                       "OAuth token expired. Now trying to refresh-token")
-                     (rmi-org-gcal-refresh-token 'rmi-org-gcal--post-event skip-export start end smry loc desc id)))
+                     (rmi-org-gcal-refresh-token 'rmi-org-gcal--post-event
+                                                 skip-export start end smry loc desc marker calendar-id etag id)))
+                  ((eq status 412)
+                   (progn
+                     (rmi-org-gcal--notify
+                      "Received HTTP 412"
+                      "ETag stale - will overwrite this entry with event from server.")
+                     (message "412 body %S" response)))
                   (t
                    (rmi-org-gcal--notify
                     (concat "Status code: " (pp-to-string status))
@@ -758,15 +782,18 @@ an error will be thrown. Point is not preserved."
      :success (cl-function
                (lambda (&key data &allow-other-keys)
                  (progn
+                   (with-current-buffer (marker-buffer marker)
+                     (goto-char (marker-position marker))
+                     (org-set-property
+                      rmi-org-gcal-etag-property
+                      (plist-get data :etag)))
                    (rmi-org-gcal--notify "Event Posted"
-                                     (concat "Org-gcal post event\n  " (plist-get data :summary)))
-                   (unless skip-import (rmi-org-gcal-fetch))))))))
+                                     (concat "Org-gcal post event\n  " (plist-get data :summary)))))))))
 
-(defun rmi-org-gcal--delete-event (event-id &optional a-token)
+(defun rmi-org-gcal--delete-event (calendar-id event-id &optional a-token)
   (let ((a-token (if a-token
                      a-token
-                   (rmi-org-gcal--get-access-token)))
-        (calendar-id (rmi-org-gcal--get-calendar-id-of-buffer)))
+                   (rmi-org-gcal--get-access-token))))
     (request
      (concat
       (format rmi-org-gcal-events-url calendar-id)
@@ -786,7 +813,8 @@ an error will be thrown. Point is not preserved."
                      (rmi-org-gcal--notify
                       "Received HTTP 401"
                       "OAuth token expired. Now trying to refresh-token")
-                     (rmi-org-gcal-refresh-token 'rmi-org-gcal--delete-event nil nil nil nil nil nil event-id)))
+                     (rmi-org-gcal-refresh-token 'rmi-org-gcal--delete-event
+                                                 nil nil nil nil nil nil nil calendar-id nil event-id)))
                   (t
                    (rmi-org-gcal--notify
                     (concat "Status code: " (pp-to-string status))
