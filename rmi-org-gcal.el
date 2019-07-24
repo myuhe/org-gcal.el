@@ -122,12 +122,6 @@ control categories, archive locations, and other local variables."
   :group 'rmi-org-gcal
   :type '(alist :key-type (string :tag "Calendar Id") :value-type (string :tag "Header")))
 
-(defcustom rmi-org-gcal-property "org-gcal"
-  "\
-Org-mode property to be set on all entries that should be handled by rmi-org-gcal."
-  :group 'rmi-org-gcal
-  :type 'string)
-
 (defcustom rmi-org-gcal-calendar-id-property "calendar-id"
   "\
 Org-mode property on org-gcal entries that records the Calendar ID."
@@ -695,7 +689,6 @@ an error will be thrown. Point is not preserved."
          (end   (if etime etime eday)))
     (when loc (replace-regexp-in-string "\n" ", " loc))
     (org-edit-headline smry)
-    (org-entry-put (point) rmi-org-gcal-property "t")
     (org-entry-put (point) rmi-org-gcal-etag-property etag)
     (when loc (org-entry-put (point) "LOCATION" loc))
     (when meet
