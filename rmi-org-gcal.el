@@ -458,7 +458,7 @@ It returns the code provided by the service."
 (defun rmi-org-gcal-refresh-token (&optional fun skip-export start end smry loc desc marker calendar-id etag id)
   "Refresh OAuth access and call FUN after that.
 Pass SKIP-EXPORT, START, END, SMRY, LOC, DESC.  and ID to FUN if
-needed."
+needed. For handling of MARKER see docstring for the function referenced by FUN."
   (deferred:$
     (request-deferred
      rmi-org-gcal-token-url
@@ -483,6 +483,9 @@ needed."
       (lambda (token)
         (cond ((eq fun 'rmi-org-gcal-sync)
                (rmi-org-gcal-sync (plist-get token :access_token) skip-export))
+              ((eq fun 'rmi-org-gcal--get-event)
+               (rmi-org-gcal--get-event
+                calendar-id id (plist-get token :access_token)))
               ((eq fun 'rmi-org-gcal--post-event)
                (rmi-org-gcal--post-event
                 start end smry loc desc marker calendar-id etag id (plist-get token :access_token)))
@@ -768,37 +771,25 @@ an error will be thrown. Point is not preserved."
                           "please check/configure `rmi-org-gcal-file-alist'")
                   (buffer-name))))
 
-(defun rmi-org-gcal--post-event (start end smry loc desc calendar-id marker &optional etag id a-token skip-import skip-export)
-  (let ((stime (rmi-org-gcal--param-date start))
-        (etime (rmi-org-gcal--param-date end))
-        (stime-alt (rmi-org-gcal--param-date-alt start))
-        (etime-alt (rmi-org-gcal--param-date-alt end))
-        (a-token (if a-token
+(defun rmi-org-gcal--get-event (calendar-id event-id &optional a-token)
+  "\
+Retrieves a Google Calendar event given a CALENDAR-ID and EVENT-ID. If the
+access token A-TOKEN is not specified, it is loaded from the token file.
+
+Returns a ‘deferred’ function that on success returns a ‘request-response‘
+object."
+  (let ((a-token (if a-token
                      a-token
                    (rmi-org-gcal--get-access-token))))
-    (request
+    (request-deferred
      (concat
       (format rmi-org-gcal-events-url calendar-id)
-      (when id
-        (concat "/" id)))
-     :type (if id "PATCH" "POST")
-     :headers (append
-               '(("Content-Type" . "application/json"))
-               (if (null etag) nil
-                 `(("If-Match" . ,etag))))
-     :data (encode-coding-string
-            (json-encode `(("start" (,stime . ,start) (,stime-alt . nil))
-                           ("end" (,etime . ,(if (equal "date" etime)
-                                                 (rmi-org-gcal--iso-next-day end)
-                                               end)) (,etime-alt . nil))
-                           ("summary" . ,smry)
-                           ("location" . ,loc)
-                           ("description" . ,desc)))
-            'utf-8)
+      (concat "/" event-id))
+     :type "GET"
+     :headers '(("Content-Type" . "application/json"))
      :params `(("access_token" . ,a-token)
                ("key" . ,rmi-org-gcal-client-secret)
                ("grant_type" . "authorization_code"))
-
      :parser 'rmi-org-gcal--json-read
      :error (cl-function
              (lambda (&key response &allow-other-keys)
@@ -810,61 +801,115 @@ an error will be thrown. Point is not preserved."
                      (rmi-org-gcal--notify
                       "Received HTTP 401"
                       "OAuth token expired. Now trying to refresh-token")
-                     (rmi-org-gcal-refresh-token 'rmi-org-gcal--post-event
-                                                 skip-export start end smry loc desc marker calendar-id etag id)))
-                  ((eq status 412)
-                   (progn
-                     (rmi-org-gcal--notify
-                      "Received HTTP 412"
-                      "ETag stale - will overwrite this entry with event from server.")
-                     (message "412 body %S" response)))
-                  (t
-                   (rmi-org-gcal--notify
-                    (concat "Status code: " (pp-to-string status))
-                    (pp-to-string error-msg)))))))
-     :success (cl-function
-               (lambda (&key data &allow-other-keys)
-                 (progn
-                   (with-current-buffer (marker-buffer marker)
-                     (goto-char (marker-position marker))
-                     (org-set-property
-                      rmi-org-gcal-etag-property
-                      (plist-get data :etag)))
-                   (rmi-org-gcal--notify "Event Posted"
-                                     (concat "Org-gcal post event\n  " (plist-get data :summary)))))))))
-  (let ((a-token (if a-token
-                     a-token
-                   (rmi-org-gcal--get-access-token))))
-    (request
-     (concat
-      (format rmi-org-gcal-events-url calendar-id)
-      (concat "/" event-id))
-     :type "DELETE"
-     :headers '(("Content-Type" . "application/json"))
-     :params `(("access_token" . ,a-token)
-               ("key" . ,rmi-org-gcal-client-secret)
-               ("grant_type" . "authorization_code"))
-     :error (cl-function
-             (lambda (&key response &allow-other-keys)
-               (let ((status (request-response-status-code response))
-                     (error-msg (request-response-error-thrown response)))
-                 (cond
-                  ((eq status 401)
-                   (progn
-                     (rmi-org-gcal--notify
-                      "Received HTTP 401"
-                      "OAuth token expired. Now trying to refresh-token")
-                     (rmi-org-gcal-refresh-token 'rmi-org-gcal--delete-event
+                     (rmi-org-gcal-refresh-token 'rmi-org-gcal--get-event
                                                  nil nil nil nil nil nil nil calendar-id nil event-id)))
                   (t
                    (rmi-org-gcal--notify
                     (concat "Status code: " (pp-to-string status))
                     (pp-to-string error-msg)))))))
      :success (cl-function
-               (lambda (&key &allow-other-keys)
-                 (progn
-                   (rmi-org-gcal-fetch)
-                   (rmi-org-gcal--notify "Event Deleted" "Org-gcal deleted event")))))))
+               (lambda (&key data &allow-other-keys)
+                 data)))))
+
+(defun rmi-org-gcal--post-event (start end smry loc desc calendar-id marker &optional etag event-id a-token skip-import skip-export)
+  "\
+Creates or updates an event on Calendar CALENDAR-ID with attributes START, END,
+SMRY, LOC, DESC. The Org buffer and point from which the event is read is given
+by MARKER.
+
+If ETAG is provided, it is used to retrieve the event data from the server and
+overwrite the event at MARKER if the event has changed on the server.
+Retrieves a Google Calendar event given a CALENDAR-ID and EVENT-ID.
+
+Returns a ‘deferred’ object that can be used to wait for completion."
+  (let ((stime (rmi-org-gcal--param-date start))
+        (etime (rmi-org-gcal--param-date end))
+        (stime-alt (rmi-org-gcal--param-date-alt start))
+        (etime-alt (rmi-org-gcal--param-date-alt end))
+        (a-token (if a-token
+                     a-token
+                   (rmi-org-gcal--get-access-token))))
+    (deferred:$
+      (request-deferred
+       (concat
+        (format rmi-org-gcal-events-url calendar-id)
+        (when event-id
+          (concat "/" event-id)))
+       :type (if event-id "PATCH" "POST")
+       :headers (append
+                 '(("Content-Type" . "application/json"))
+                 (if (null etag) nil
+                   `(("If-Match" . ,etag))))
+       :data (encode-coding-string
+              (json-encode `(("start" (,stime . ,start) (,stime-alt . nil))
+                             ("end" (,etime . ,(if (equal "date" etime)
+                                                   (rmi-org-gcal--iso-next-day end)
+                                                 end)) (,etime-alt . nil))
+                             ("summary" . ,smry)
+                             ("location" . ,loc)
+                             ("description" . ,desc)))
+              'utf-8)
+       :params `(("access_token" . ,a-token)
+                 ("key" . ,rmi-org-gcal-client-secret)
+                 ("grant_type" . "authorization_code"))
+
+       :parser 'rmi-org-gcal--json-read)
+      (deferred:nextc it
+        (lambda (response)
+          (let
+              ((temp (request-response-data response))
+               (status (request-response-status-code response))
+               (error-msg (request-response-error-thrown response)))
+            (cond
+             ;; If there is no network connectivity, the response will not
+             ;; include a status code.
+             ((eq status nil)
+              (rmi-org-gcal--notify
+               "Got Error"
+               "Could not contact remote service. Please check your network connectivity."))
+             ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
+                          status))
+              (rmi-org-gcal--notify
+               "Received HTTP 401"
+               "OAuth token expired. Now trying to refresh-token")
+              (deferred:next
+                (lambda ()
+                  (rmi-org-gcal-refresh-token 'rmi-org-gcal--post-event
+                                              skip-export start end smry loc desc marker calendar-id etag event-id))))
+             ;; ETag on current entry is stale. This means the event on the
+             ;; server has been updated. In that case, update the event using
+             ;; the data from the server.
+             ((eq status 412)
+              (rmi-org-gcal--notify
+               "Received HTTP 412"
+               "ETag stale - will overwrite this entry with event from server.")
+              (deferred:$
+                (rmi-org-gcal--get-event calendar-id event-id a-token)
+                (deferred:nextc it
+                  (lambda (response)
+                    (save-excursion
+                      (with-current-buffer (marker-buffer marker)
+                        (goto-char (marker-position marker))
+                        (rmi-org-gcal--update-entry
+                         calendar-id
+                         (request-response-data response))))))))
+             ;; Generic error-handler meant to provide useful information about
+             ;; failure cases not otherwise explicitly specified.
+             ((not (eq error-msg nil))
+              (rmi-org-gcal--notify
+               (concat "Status code: " (number-to-string status))
+               (pp-to-string error-msg)))
+             ;; Fetch was successful.
+             (t
+              (let* ((data (request-response-data response)))
+                (save-excursion
+                  (with-current-buffer (marker-buffer marker)
+                    (goto-char (marker-position marker))
+                    (org-set-property
+                     rmi-org-gcal-etag-property
+                     (plist-get data :etag))))
+                (rmi-org-gcal--notify "Event Posted"
+                                      (concat "Org-gcal post event\n  " (plist-get data :summary))))))))))))
 
 
 (defun rmi-org-gcal--delete-event (calendar-id event-id etag &optional a-token)
