@@ -256,16 +256,28 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                                       (kill-buffer buf))
                              (sit-for 2)
                              (rmi-org-gcal-sync nil t t)))
-                         (erase-buffer)
+                         (goto-char (point-max))
                          (let ((items (rmi-org-gcal--filter (plist-get (request-response-data response) :items))))
-                           (when (assoc (car x) rmi-org-gcal-header-alist)
-                             (insert (cdr (assoc (car x) rmi-org-gcal-header-alist))))
+                           ;; (when (assoc (car x) rmi-org-gcal-header-alist)
+                           ;;   (insert (cdr (assoc (car x) rmi-org-gcal-header-alist))))
                            (mapcar
-                            (lambda (lst)
-                              (insert "* ")
-                              (rmi-org-gcal--update-entry (car x) lst))
+                            (lambda (event)
+                              (let ((marker (org-id-find (plist-get event :id) 'markerp)))
+                                (if marker
+                                    ;; If the ID has been retrieved already,
+                                    ;; find the event and update it. This will
+                                    ;; update events that have been moved from
+                                    ;; the default fetch file.
+                                    (save-excursion
+                                      (with-current-buffer (marker-buffer marker)
+                                        (goto-char (marker-position marker))
+                                        (rmi-org-gcal--update-entry (car x) event))
+                                      (set-marker marker nil))
+                                  ;; Otherwise, insert a new entry into the
+                                  ;; default fetch file.
+                                  (insert "\n* ")
+                                  (rmi-org-gcal--update-entry (car x) event))))
                             items)
-                           (let ((plst (with-temp-buffer (insert-file-contents rmi-org-gcal-token-file)
                            ;; Update token file.
                            (let ((token (with-temp-buffer (insert-file-contents rmi-org-gcal-token-file)
                                                          (read (buffer-string)))))
