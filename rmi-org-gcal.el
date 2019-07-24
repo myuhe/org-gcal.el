@@ -266,9 +266,11 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                               (rmi-org-gcal--update-entry (car x) lst))
                             items)
                            (let ((plst (with-temp-buffer (insert-file-contents rmi-org-gcal-token-file)
+                           ;; Update token file.
+                           (let ((token (with-temp-buffer (insert-file-contents rmi-org-gcal-token-file)
                                                          (read (buffer-string)))))
                              (with-temp-file rmi-org-gcal-token-file
-                               (pp plst (current-buffer)))))
+                               (pp token (current-buffer)))))
                          (org-set-startup-visibility)
                          (save-buffer))
                        (unless silent
