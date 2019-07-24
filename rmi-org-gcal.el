@@ -84,10 +84,15 @@
   :group 'rmi-org-gcal
   :type 'string)
 
-(defcustom rmi-org-gcal-file-alist nil
-  "List of association '(calendar-id file) to synchronize at once for calendar id."
+(defcustom rmi-org-gcal-fetch-file-alist nil
+  "\
+Association list '(calendar-id file). For each calendar-id,‘rmi-org-gcal-fetch’
+and ‘rmi-org-gcal-sync’ will retrieve new events on the calendar and insert
+them into the file."
   :group 'rmi-org-gcal
   :type '(alist :key-type (string :tag "Calendar Id") :value-type (file :tag "Org file")))
+
+(defvaralias 'rmi-org-gcal-file-alist 'rmi-org-gcal-fetch-file-alist)
 
 (defcustom rmi-org-gcal-logo-file nil
   "Org-gcal logo image filename to display in notifications."
@@ -110,7 +115,7 @@ Predicate functions take an event, and if they return nil the
   "\
 Association list of '(calendar-id header). For each calendar-id present in this
 list, the associated header will be inserted at the top of the file associated
-with the calendar-id in rmi-org-gcal-file-alist, before any calendar entries.
+with the calendar-id in rmi-org-gcal-fetch-file-alist, before any calendar entries.
 
 This is intended to set headers in the org-mode files maintained by rmi-org-gcal to
 control categories, archive locations, and other local variables."
@@ -164,11 +169,11 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
   (interactive)
   (rmi-org-gcal--ensure-token)
   (when rmi-org-gcal-auto-archive
-    (dolist (i rmi-org-gcal-file-alist)
+    (dolist (i rmi-org-gcal-fetch-file-alist)
       (with-current-buffer
           (find-file-noselect (cdr i))
         (rmi-org-gcal--archive-old-event))))
-  (cl-loop for x in rmi-org-gcal-file-alist
+  (cl-loop for x in rmi-org-gcal-fetch-file-alist
            do
            (let ((x x)
                  (a-token (if a-token
@@ -764,11 +769,11 @@ an error will be thrown. Point is not preserved."
 
 (defun rmi-org-gcal--get-calendar-id-of-buffer ()
   "Find calendar id of current buffer."
-  (or (cl-loop for (id . file) in rmi-org-gcal-file-alist
+  (or (cl-loop for (id . file) in rmi-org-gcal-fetch-file-alist
                if (file-equal-p file (buffer-file-name (buffer-base-buffer)))
                return id)
       (user-error (concat "Buffer `%s' may not related to google calendar; "
-                          "please check/configure `rmi-org-gcal-file-alist'")
+                          "please check/configure `rmi-org-gcal-fetch-file-alist'")
                   (buffer-name))))
 
 (defun rmi-org-gcal--get-event (calendar-id event-id &optional a-token)
@@ -981,7 +986,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
               (rmi-org-gcal--notify "Event Deleted" "Org-gcal deleted event")))))))))
 
 (defun rmi-org-gcal--capture-post ()
-  (dolist (i rmi-org-gcal-file-alist)
+  (dolist (i rmi-org-gcal-fetch-file-alist)
     (when (string=  (file-name-nondirectory (cdr i))
                     (substring (buffer-name) 8))
       (rmi-org-gcal-post-at-point))))
