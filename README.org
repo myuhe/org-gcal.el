@@ -97,18 +97,6 @@ Data will be UTF-8 encoded for sync.
 
 Modify =org-gcal-notify-p= from =t= to =nil=
 
-** Headers in org-gcal files
-
-   Create variable org-gcal-header-alist
-
-#+begin_src elisp
-(setq org-gcal-header-alist '(("me@gmail.com" . "#+CATEGORY: personal\n")))
-#+end_src
-
-#+BEGIN_QUOTE
-I often need to set headers in org-mode files to control categories, archive locations, and other local variables. This patch allows for the insertion of arbitary headers. It creates a single alist variable (org-gcal-header-alist) and if it exists for a given file it inserts it before writing the calendar items.
-#+END_QUOTE
-
 * Error
 ** I get "Org-gcal error: Couldn't parse your-cal.org"
    The org file where you sync the calendar must have all entries with

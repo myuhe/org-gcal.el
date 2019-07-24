@@ -111,17 +111,6 @@ Predicate functions take an event, and if they return nil the
   :group 'rmi-org-gcal
   :type 'boolean)
 
-(defcustom rmi-org-gcal-header-alist ()
-  "\
-Association list of '(calendar-id header). For each calendar-id present in this
-list, the associated header will be inserted at the top of the file associated
-with the calendar-id in rmi-org-gcal-fetch-file-alist, before any calendar entries.
-
-This is intended to set headers in the org-mode files maintained by rmi-org-gcal to
-control categories, archive locations, and other local variables."
-  :group 'rmi-org-gcal
-  :type '(alist :key-type (string :tag "Calendar Id") :value-type (string :tag "Header")))
-
 (defcustom rmi-org-gcal-calendar-id-property "calendar-id"
   "\
 Org-mode property on org-gcal entries that records the Calendar ID."
@@ -258,8 +247,6 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                              (rmi-org-gcal-sync nil t t)))
                          (goto-char (point-max))
                          (let ((items (rmi-org-gcal--filter (plist-get (request-response-data response) :items))))
-                           ;; (when (assoc (car x) rmi-org-gcal-header-alist)
-                           ;;   (insert (cdr (assoc (car x) rmi-org-gcal-header-alist))))
                            (mapcar
                             (lambda (event)
                               (let ((marker (org-id-find (plist-get event :id) 'markerp)))
