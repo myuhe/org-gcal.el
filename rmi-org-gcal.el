@@ -664,29 +664,29 @@ TO.  Instead an empty string is returned."
 (defun rmi-org-gcal--iso-previous-day (str)
   (rmi-org-gcal--iso-next-day str t))
 
-(defun rmi-org-gcal--update-entry (calendar-id plst)
+(defun rmi-org-gcal--update-entry (calendar-id event)
   "\
-Update the entry at the current heading with information from PLST, which is
+Update the entry at the current heading with information from EVENT, which is
 parsed from the Calendar API JSON response using
 ‘rmi-org-gcal--json-read’. Point must be located on an Org-mode heading line or
 an error will be thrown. Point is not preserved."
   (unless (org-at-heading-p)
     (user-error "Must be on Org-mode heading."))
-  (let* ((smry  (or (plist-get plst :summary)
+  (let* ((smry  (or (plist-get event :summary)
                     "busy"))
-         (desc  (plist-get plst :description))
-         (loc   (plist-get plst :location))
-         (link  (plist-get plst :htmlLink))
-         (meet  (plist-get plst :hangoutLink))
-         (etag (plist-get plst :etag))
-         (id    (plist-get plst :id))
-         (stime (plist-get (plist-get plst :start)
+         (desc  (plist-get event :description))
+         (loc   (plist-get event :location))
+         (link  (plist-get event :htmlLink))
+         (meet  (plist-get event :hangoutLink))
+         (etag (plist-get event :etag))
+         (id    (plist-get event :id))
+         (stime (plist-get (plist-get event :start)
                            :dateTime))
-         (etime (plist-get (plist-get plst :end)
+         (etime (plist-get (plist-get event :end)
                            :dateTime))
-         (sday  (plist-get (plist-get plst :start)
+         (sday  (plist-get (plist-get event :start)
                            :date))
-         (eday  (plist-get (plist-get plst :end)
+         (eday  (plist-get (plist-get event :end)
                            :date))
          (start (if stime stime sday))
          (end   (if etime etime eday)))
