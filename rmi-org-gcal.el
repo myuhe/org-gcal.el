@@ -350,6 +350,7 @@ current calendar."
              elem))
            (tobj) (start) (end) (desc))
       ;; Parse :org-gcal: drawer for event time and description.
+      (goto-char (marker-position marker))
       (when
           (re-search-forward
             (format "^[ \t]*:%s:[ \t]*$" rmi-org-gcal-drawer-name)
@@ -702,14 +703,16 @@ an error will be thrown. Point is not preserved."
     (org-entry-put (point) "ID" id)
     ;; Insert event time and description in :ORG-GCAL: drawer, erasing the
     ;; current contents.
+    (org-back-to-heading)
     (when (re-search-forward
            (format
-            "^[ \t]*:%s:[^z-a]*?^[ \t]*:END:[ \t]*\n"
+            "^[ \t]*:%s:[^z-a]*?\n[ \t]*:END:[ \t]*\n?"
             (regexp-quote rmi-org-gcal-drawer-name))
            (save-excursion (outline-next-heading) (point))
            'noerror)
-      (progn
-        (replace-match "" 'fixedcase)))
+      (replace-match "" 'fixedcase)
+      ;; Go up to ensure we remain in the same entry.
+      (forward-line -1))
     (org-back-to-heading)
     (re-search-forward ":PROPERTIES:[^z-a]*?:END:"
                        (save-excursion (outline-next-heading) (point)))
@@ -743,8 +746,7 @@ an error will be thrown. Point is not preserved."
       (newline)
       (insert (replace-regexp-in-string "^\*" "✱" desc))
       (insert (if (string= "\n" (rmi-org-gcal--safe-substring desc -1)) "" "\n")))
-    (insert ":END:")
-    (newline)))
+    (insert ":END:")))
 
 (defun rmi-org-gcal--format-date (str format &optional tz)
   (let* ((plst (rmi-org-gcal--parse-date str))
