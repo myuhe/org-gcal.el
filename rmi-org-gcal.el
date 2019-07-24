@@ -455,9 +455,9 @@ It returns the code provided by the service."
    (cl-function (lambda (&key error-thrown &allow-other-keys)
                   (message "Got error: %S" error-thrown)))))
 
-(defun rmi-org-gcal-refresh-token (&optional fun skip-export start end smry loc desc marker calendar-id etag id)
+(defun rmi-org-gcal-refresh-token (&optional fun skip-export start end smry loc desc marker calendar-id etag event-id)
   "Refresh OAuth access and call FUN after that.
-Pass SKIP-EXPORT, START, END, SMRY, LOC, DESC.  and ID to FUN if
+Pass SKIP-EXPORT, START, END, SMRY, LOC, DESC.  and EVENT-ID to FUN if
 needed. For handling of MARKER see docstring for the function referenced by FUN."
   (deferred:$
     (request-deferred
@@ -485,12 +485,12 @@ needed. For handling of MARKER see docstring for the function referenced by FUN.
                (rmi-org-gcal-sync (plist-get token :access_token) skip-export))
               ((eq fun 'rmi-org-gcal--get-event)
                (rmi-org-gcal--get-event
-                calendar-id id (plist-get token :access_token)))
+                calendar-id event-id (plist-get token :access_token)))
               ((eq fun 'rmi-org-gcal--post-event)
                (rmi-org-gcal--post-event
-                start end smry loc desc marker calendar-id etag id (plist-get token :access_token)))
+                start end smry loc desc calendar-id marker etag event-id (plist-get token :access_token)))
               ((eq fun 'rmi-org-gcal--delete-event)
-               (rmi-org-gcal--delete-event calendar-id id etag marker (plist-get token :access_token))))))))
+               (rmi-org-gcal--delete-event calendar-id event-id etag marker (plist-get token :access_token))))))))
 
 ;; Internal
 (defun rmi-org-gcal--archive-old-event ()
