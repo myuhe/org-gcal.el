@@ -782,35 +782,49 @@ object."
   (let ((a-token (if a-token
                      a-token
                    (rmi-org-gcal--get-access-token))))
-    (request-deferred
-     (concat
-      (format rmi-org-gcal-events-url calendar-id)
-      (concat "/" event-id))
-     :type "GET"
-     :headers '(("Content-Type" . "application/json"))
-     :params `(("access_token" . ,a-token)
-               ("key" . ,rmi-org-gcal-client-secret)
-               ("grant_type" . "authorization_code"))
-     :parser 'rmi-org-gcal--json-read
-     :error (cl-function
-             (lambda (&key response &allow-other-keys)
-               (let ((status (request-response-status-code response))
-                     (error-msg (request-response-error-thrown response)))
-                 (cond
-                  ((eq status 401)
-                   (progn
-                     (rmi-org-gcal--notify
-                      "Received HTTP 401"
-                      "OAuth token expired. Now trying to refresh-token")
-                     (rmi-org-gcal-refresh-token 'rmi-org-gcal--get-event
-                                                 nil nil nil nil nil nil nil calendar-id nil event-id)))
-                  (t
-                   (rmi-org-gcal--notify
-                    (concat "Status code: " (pp-to-string status))
-                    (pp-to-string error-msg)))))))
-     :success (cl-function
-               (lambda (&key data &allow-other-keys)
-                 data)))))
+    (deferred:$
+      (request-deferred
+       (concat
+        (format rmi-org-gcal-events-url calendar-id)
+        (concat "/" event-id))
+       :type "GET"
+       :headers '(("Content-Type" . "application/json"))
+       :params `(("access_token" . ,a-token)
+                 ("key" . ,rmi-org-gcal-client-secret)
+                 ("grant_type" . "authorization_code"))
+       :parser 'rmi-org-gcal--json-read)
+      (deferred:nextc it
+        (lambda (response)
+          (let
+              ((temp (request-response-data response))
+               (status (request-response-status-code response))
+               (error-msg (request-response-error-thrown response)))
+            (cond
+             ;; If there is no network connectivity, the response will not
+             ;; include a status code.
+             ((eq status nil)
+              (set-marker marker nil)
+              (rmi-org-gcal--notify
+               "Got Error"
+               "Could not contact remote service. Please check your network connectivity."))
+             ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
+                          status))
+              (rmi-org-gcal--notify
+               "Received HTTP 401"
+               "OAuth token expired. Now trying to refresh-token")
+              (deferred:next
+                (lambda ()
+                  (rmi-org-gcal-refresh-token 'rmi-org-gcal--get-event
+                                              nil nil nil nil nil nil nil calendar-id nil event-id))))
+             ;; Generic error-handler meant to provide useful information about
+             ;; failure cases not otherwise explicitly specified.
+             ((not (eq error-msg nil))
+              (set-marker marker nil)
+              (rmi-org-gcal--notify
+               (concat "Status code: " (number-to-string status))
+               (pp-to-string error-msg)))
+             ;; Fetch was successful.
+             (t response))))))))
 
 (defun rmi-org-gcal--post-event (start end smry loc desc calendar-id marker &optional etag event-id a-token skip-import skip-export)
   "\
