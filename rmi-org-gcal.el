@@ -415,7 +415,8 @@ current calendar."
   (save-excursion
     (end-of-line)
     (org-back-to-heading)
-    (let* ((elem (org-element-headline-parser (point-max) t))
+    (let* ((marker (point-marker))
+           (elem (org-element-headline-parser (point-max) t))
            (smry (org-element-property :title elem))
            (calendar-id
             (org-element-property
@@ -427,7 +428,7 @@ current calendar."
            (event-id (org-element-property :ID elem)))
       (when (and event-id
                  (y-or-n-p (format "Do you really want to delete event?\n\n%s\n\n" smry)))
-        (rmi-org-gcal--delete-event calendar-id event-id etag)))))
+        (rmi-org-gcal--delete-event calendar-id event-id etag marker)))))
 
 (defun rmi-org-gcal-request-authorization ()
   "Request OAuth authorization at AUTH-URL by launching `browse-url'.
@@ -495,7 +496,7 @@ needed. For handling of MARKER see docstring for the function referenced by FUN.
                (rmi-org-gcal--post-event
                 start end smry loc desc marker calendar-id etag id (plist-get token :access_token)))
               ((eq fun 'rmi-org-gcal--delete-event)
-               (rmi-org-gcal--delete-event calendar-id id (plist-get token :access_token))))))))
+               (rmi-org-gcal--delete-event calendar-id id etag marker (plist-get token :access_token))))))))
 
 ;; Internal
 (defun rmi-org-gcal--archive-old-event ()
@@ -823,8 +824,8 @@ SMRY, LOC, DESC. The Org buffer and point from which the event is read is given
 by MARKER.
 
 If ETAG is provided, it is used to retrieve the event data from the server and
-overwrite the event at MARKER if the event has changed on the server.
-Retrieves a Google Calendar event given a CALENDAR-ID and EVENT-ID.
+overwrite the event at MARKER if the event has changed on the server. MARKER is
+freed by this function.
 
 Returns a ‘deferred’ object that can be used to wait for completion."
   (let ((stime (rmi-org-gcal--param-date start))
@@ -869,6 +870,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
              ;; If there is no network connectivity, the response will not
              ;; include a status code.
              ((eq status nil)
+              (set-marker marker nil)
               (rmi-org-gcal--notify
                "Got Error"
                "Could not contact remote service. Please check your network connectivity."))
@@ -895,12 +897,14 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                     (save-excursion
                       (with-current-buffer (marker-buffer marker)
                         (goto-char (marker-position marker))
+                        (set-marker marker nil)
                         (rmi-org-gcal--update-entry
                          calendar-id
                          (request-response-data response))))))))
              ;; Generic error-handler meant to provide useful information about
              ;; failure cases not otherwise explicitly specified.
              ((not (eq error-msg nil))
+              (set-marker marker nil)
               (rmi-org-gcal--notify
                (concat "Status code: " (number-to-string status))
                (pp-to-string error-msg)))
@@ -910,6 +914,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                 (save-excursion
                   (with-current-buffer (marker-buffer marker)
                     (goto-char (marker-position marker))
+                    (set-marker marker nil)
                     (org-set-property
                      rmi-org-gcal-etag-property
                      (plist-get data :etag))))
@@ -917,7 +922,16 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                                       (concat "Org-gcal post event\n  " (plist-get data :summary))))))))))))
 
 
-(defun rmi-org-gcal--delete-event (calendar-id event-id etag &optional a-token)
+(defun rmi-org-gcal--delete-event (calendar-id event-id etag marker &optional a-token)
+  "\
+Deletes an event on Calendar CALENDAR-ID with EVENT-ID. The Org buffer and
+point from which the event is read is given by MARKER.
+
+If ETAG is provided, it is used to retrieve the event data from the server and
+overwrite the event at MARKER if the event has changed on the server. MARKER is
+freed by this function.
+
+Returns a ‘deferred’ object that can be used to wait for completion."
   (let ((a-token (if a-token
                      a-token
                    (rmi-org-gcal--get-access-token))))
@@ -946,6 +960,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
              ;; If there is no network connectivity, the response will not
              ;; include a status code.
              ((eq status nil)
+              (set-marker marker nil)
               (rmi-org-gcal--notify
                "Got Error"
                "Could not contact remote service. Please check your network connectivity."))
@@ -957,7 +972,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
               (deferred:next
                 (lambda ()
                   (rmi-org-gcal-refresh-token 'rmi-org-gcal--delete-event
-                                              nil nil nil nil nil nil nil calendar-id etag event-id))))
+                                              nil nil nil nil nil nil marker calendar-id etag event-id))))
              ;; ETag on current entry is stale. This means the event on the
              ;; server has been updated. In that case, update the event using
              ;; the data from the server.
@@ -972,17 +987,20 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                     (save-excursion
                       (with-current-buffer (marker-buffer marker)
                         (goto-char (marker-position marker))
+                        (set-marker marker nil)
                         (rmi-org-gcal--update-entry
                          calendar-id
                          (request-response-data response))))))))
              ;; Generic error-handler meant to provide useful information about
              ;; failure cases not otherwise explicitly specified.
              ((not (eq error-msg nil))
+              (set-marker marker nil)
               (rmi-org-gcal--notify
                (concat "Status code: " (number-to-string status))
                (pp-to-string error-msg)))
              ;; Fetch was successful.
              (t
+              (set-marker marker nil)
               (rmi-org-gcal--notify "Event Deleted" "Org-gcal deleted event")))))))))
 
 (defun rmi-org-gcal--capture-post ()
