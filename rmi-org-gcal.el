@@ -135,6 +135,13 @@ Org-mode property on org-gcal entries that records the ETag."
   :group 'rmi-org-gcal
   :type 'string)
 
+(defcustom rmi-org-gcal-drawer-name "org-gcal"
+  "\
+Name of drawer in which event time and description are stored on org-gcal
+entries."
+  :group 'rmi-org-gcal
+  :type 'string)
+
 (defvar rmi-org-gcal-token-plist nil
   "Token plist.")
 
@@ -332,10 +339,6 @@ current calendar."
     (let* ((skip-import skip-import)
            (marker (point-marker))
            (elem (org-element-headline-parser (point-max) t))
-           (tobj (progn (re-search-forward "<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"
-                                           (save-excursion (outline-next-heading) (point)))
-                        (goto-char (match-beginning 0))
-                        (org-element-timestamp-parser)))
            (smry (org-element-property :title elem))
            (loc (org-element-property :LOCATION elem))
            (id (org-element-property :ID elem))
@@ -346,35 +349,57 @@ current calendar."
             (org-element-property
              (rmi-org-gcal--property-from-name rmi-org-gcal-calendar-id-property)
              elem))
-           (start (rmi-org-gcal--format-org2iso
-                   (plist-get (cadr tobj) :year-start)
-                   (plist-get (cadr tobj) :month-start)
-                   (plist-get (cadr tobj) :day-start)
-                   (plist-get (cadr tobj) :hour-start)
-                   (plist-get (cadr tobj) :minute-start)
-                   (when (plist-get (cadr tobj) :hour-start)
-                     t)))
-           (end (rmi-org-gcal--format-org2iso
+           (tobj) (start) (end) (desc))
+      ;; Parse :org-gcal: drawer for event time and description.
+      (when
+          (re-search-forward
+            (format "^[ \t]*:%s:[ \t]*$" rmi-org-gcal-drawer-name)
+            (save-excursion (outline-next-heading) (point))
+            'noerror)
+        ;; The event time is located at the beginning of the drawer.
+        (re-search-forward "<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"
+                                           (save-excursion (outline-next-heading) (point)))
+        (goto-char (match-beginning 0))
+        (setq tobj (org-element-timestamp-parser))
+        ;; Lines after the timestamp contain the description. Skip leading
+        ;; blank lines.
+        (forward-line)
+        (beginning-of-line)
+        (re-search-forward
+         "\\(?:^[ \t]*$\\)*\\([^z-a]*?\\)\n?[ \t]*:END:"
+         (save-excursion (outline-next-heading) (point)))
+        (setq desc (match-string 1))
+        (setq desc
+              (if (string-match-p "\n*" desc)
+                  nil
+                (replace-regexp-in-string
+                 "^✱" "*"
+                 (replace-regexp-in-string
+                  "\\`\\(?: *<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*?>$\\)\n?\n?"
+                  ""
+                  (replace-regexp-in-string
+                   " *:PROPERTIES:\n *\\(.*\\(?:\n.*\\)*?\\) *:END:\n+"
+                   ""
+                   desc))))
+           start
+            (rmi-org-gcal--format-org2iso
+             (plist-get (cadr tobj) :year-start)
+             (plist-get (cadr tobj) :month-start)
+             (plist-get (cadr tobj) :day-start)
+             (plist-get (cadr tobj) :hour-start)
+             (plist-get (cadr tobj) :minute-start)
+             (when (plist-get (cadr tobj) :hour-start)
+               t))
+           end
+            (rmi-org-gcal--format-org2iso
                  (plist-get (cadr tobj) :year-end)
                  (plist-get (cadr tobj) :month-end)
                  (plist-get (cadr tobj) :day-end)
                  (plist-get (cadr tobj) :hour-end)
                  (plist-get (cadr tobj) :minute-end)
                  (when (plist-get (cadr tobj) :hour-start)
-                   t)))
-           (desc (if (plist-get (cadr elem) :contents-begin)
-                     (replace-regexp-in-string "^✱" "*"
-                                               (replace-regexp-in-string
-                                                "\\`\\(?: *<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].*?>$\\)\n?\n?"
-                                                ""
-                                                (replace-regexp-in-string
-                                                 " *:PROPERTIES:\n *\\(.*\\(?:\n.*\\)*?\\) *:END:\n+"
-                                                 ""
-                                                 (buffer-substring-no-properties
-                                                  (plist-get (cadr elem) :contents-begin)
-                                                  (plist-get (cadr elem) :contents-end)))))
-                   "")))
-      (message "ETag %S" etag)
+                   t
+                   ""))))
       (rmi-org-gcal--post-event start end smry loc desc calendar-id marker etag id nil skip-import))))
 
 ;;;###autoload
@@ -673,10 +698,23 @@ an error will be thrown. Point is not preserved."
                "Join Hangouts Meet")))
     (org-entry-put (point) rmi-org-gcal-calendar-id-property calendar-id)
     (org-entry-put (point) "ID" id)
-    ;; Insert event time at end of current entry.
-    (unless (outline-next-heading)
-      (goto-char (point-max))
-      (newline))
+    ;; Insert event time and description in :ORG-GCAL: drawer, erasing the
+    ;; current contents.
+    (when (re-search-forward
+           (format
+            "^[ \t]*:%s:[^z-a]*?^[ \t]*:END:[ \t]*\n"
+            (regexp-quote rmi-org-gcal-drawer-name))
+           (save-excursion (outline-next-heading) (point))
+           'noerror)
+      (progn
+        (replace-match "" 'fixedcase)))
+    (org-back-to-heading)
+    (re-search-forward ":PROPERTIES:[^z-a]*?:END:"
+                       (save-excursion (outline-next-heading) (point)))
+    (end-of-line)
+    (newline)
+    (insert (format ":%s:" rmi-org-gcal-drawer-name))
+    (newline)
     (if (or (string= start end) (rmi-org-gcal--alldayp start end))
         (insert (rmi-org-gcal--format-iso2org start))
       (if (and
@@ -702,7 +740,9 @@ an error will be thrown. Point is not preserved."
     (when desc
       (newline)
       (insert (replace-regexp-in-string "^\*" "✱" desc))
-      (insert (if (string= "\n" (rmi-org-gcal--safe-substring desc -1)) "" "\n")))))
+      (insert (if (string= "\n" (rmi-org-gcal--safe-substring desc -1)) "" "\n")))
+    (insert ":END:")
+    (newline)))
 
 (defun rmi-org-gcal--format-date (str format &optional tz)
   (let* ((plst (rmi-org-gcal--parse-date str))
