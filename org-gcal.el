@@ -346,11 +346,17 @@ current calendar."
             (format "^[ \t]*:%s:[ \t]*$" org-gcal-drawer-name)
             (save-excursion (outline-next-heading) (point))
             'noerror)
-        ;; The event time is located at the beginning of the drawer.
-        (re-search-forward "<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"
-                                           (save-excursion (outline-next-heading) (point)))
-        (goto-char (match-beginning 0))
-        (setq tobj (org-element-timestamp-parser))
+        ;; First read any event time from the drawer if present. It's located
+        ;; at the beginning of the drawer.
+        (save-excursion
+          (when
+              (re-search-forward "<[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"
+                                 (save-excursion (outline-next-heading) (point))
+                                 'noerror)
+            (goto-char (match-beginning 0))
+            (setq tobj (org-element-timestamp-parser))))
+        ;; Prefer to read event time from the SCHEDULED property if present.
+        (setq tobj (or (org-element-property :scheduled elem) tobj))
         ;; Lines after the timestamp contain the description. Skip leading
         ;; blank lines.
         (forward-line)
@@ -677,7 +683,8 @@ an error will be thrown. Point is not preserved."
          (eday  (plist-get (plist-get event :end)
                            :date))
          (start (if stime stime sday))
-         (end   (if etime etime eday)))
+         (end   (if etime etime eday))
+         (elem))
     (when loc (replace-regexp-in-string "\n" ", " loc))
     (org-edit-headline smry)
     (org-entry-put (point) org-gcal-etag-property etag)
@@ -694,6 +701,7 @@ an error will be thrown. Point is not preserved."
     ;; Insert event time and description in :ORG-GCAL: drawer, erasing the
     ;; current contents.
     (org-back-to-heading)
+    (setq elem (org-element-at-point))
     (save-excursion
       (when (re-search-forward
              (format
@@ -708,30 +716,33 @@ an error will be thrown. Point is not preserved."
     (newline)
     (insert (format ":%s:" org-gcal-drawer-name))
     (newline)
-    (if (or (string= start end) (org-gcal--alldayp start end))
-        (insert (org-gcal--format-iso2org start))
-      (if (and
-           (= (plist-get (org-gcal--parse-date start) :year)
-              (plist-get (org-gcal--parse-date end)   :year))
-           (= (plist-get (org-gcal--parse-date start) :mon)
-              (plist-get (org-gcal--parse-date end)   :mon))
-           (= (plist-get (org-gcal--parse-date start) :day)
-              (plist-get (org-gcal--parse-date end)   :day)))
-          (insert "<"
-                  (org-gcal--format-date start "%Y-%m-%d %a %H:%M")
-                  "-"
-                  (org-gcal--format-date end "%H:%M")
-                  ">")
-        (insert (org-gcal--format-iso2org start)
-                "--"
-                (org-gcal--format-iso2org
-                 (if (< 11 (length end))
-                     end
-                   (org-gcal--iso-previous-day end))))))
-    (newline)
+    (let*
+        ((timestamp
+          (if (or (string= start end) (org-gcal--alldayp start end))
+              (org-gcal--format-iso2org start)
+            (if (and
+                 (= (plist-get (org-gcal--parse-date start) :year)
+                    (plist-get (org-gcal--parse-date end)   :year))
+                 (= (plist-get (org-gcal--parse-date start) :mon)
+                    (plist-get (org-gcal--parse-date end)   :mon))
+                 (= (plist-get (org-gcal--parse-date start) :day)
+                    (plist-get (org-gcal--parse-date end)   :day)))
+                (format "<%s-%s>"
+                        (org-gcal--format-date start "%Y-%m-%d %a %H:%M")
+                        (org-gcal--format-date end "%H:%M"))
+              (format "%s--%s"
+                      (org-gcal--format-iso2org start)
+                      (org-gcal--format-iso2org
+                       (if (< 11 (length end))
+                           end
+                         (org-gcal--iso-previous-day end))))))))
+      (if (org-element-property :scheduled elem)
+          (org-schedule nil timestamp)
+        (insert timestamp)
+        (newline)
+        (when desc (newline))))
     ;; Insert event description if present.
     (when desc
-      (newline)
       (insert (replace-regexp-in-string "^\*" "✱" desc))
       (insert (if (string= "\n" (org-gcal--safe-substring desc -1)) "" "\n")))
     (insert ":END:")))
