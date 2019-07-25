@@ -204,13 +204,13 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                         "OAuth token expired. Now trying to refresh-token")
                        (deferred:next
                          (lambda()
-                           (org-gcal-refresh-token 'org-gcal-sync skip-export))))
+                           (org-gcal-refresh-token 'org-gcal-sync nil skip-export))))
                       ((eq 403 status)
                        (org-gcal--notify "Received HTTP 403"
                                              "Ensure you enabled the Calendar API through the Developers Console, then try again.")
                        (deferred:nextc it
                          (lambda()
-                           (org-gcal-refresh-token 'org-gcal-sync skip-export))))
+                           (org-gcal-refresh-token 'org-gcal-sync nil skip-export))))
                       ;; We got some 2xx response, but for some reason no
                       ;; message body.
                       ((and (> 299 status) (eq temp nil))
@@ -316,16 +316,22 @@ PROPERTY argument to ‘org-element-property’."
   (intern (concat ":" (upcase name))))
 
 ;;;###autoload
-(defun org-gcal-post-at-point (&optional skip-import)
-  "Post entry at point to current calendar.
-If SKIP-IMPORT is not nil, do not import events from the
-current calendar."
+(defun org-gcal-post-at-point (&optional skip-import skip-export)
+  "\
+Post entry at point to current calendar. This overwrites the event on the
+server with the data from the entry, except if the ‘org-gcal-etag-property’ is
+present and is out of sync with the server, in which case the entry is
+overwritten with data from the server instead.
+
+If SKIP-IMPORT is not nil, don’t overwrite the entry with data from the server.
+If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
   (interactive)
   (org-gcal--ensure-token)
   (save-excursion
     (end-of-line)
     (org-back-to-heading)
     (let* ((skip-import skip-import)
+           (skip-export skip-export)
            (marker (point-marker))
            (elem (org-element-headline-parser (point-max) t))
            (smry (org-element-property :title elem))
@@ -396,7 +402,7 @@ current calendar."
                  (when (plist-get (cadr tobj) :hour-start)
                    t
                    ""))))
-      (org-gcal--post-event start end smry loc desc calendar-id marker etag id nil skip-import))))
+      (org-gcal--post-event start end smry loc desc calendar-id marker etag id nil skip-import skip-export))))
 
 ;;;###autoload
 (defun org-gcal-delete-at-point ()
@@ -452,9 +458,9 @@ It returns the code provided by the service."
    (cl-function (lambda (&key error-thrown &allow-other-keys)
                   (message "Got error: %S" error-thrown)))))
 
-(defun org-gcal-refresh-token (&optional fun skip-export start end smry loc desc marker calendar-id etag event-id)
+(defun org-gcal-refresh-token (&optional fun skip-import skip-export start end smry loc desc marker calendar-id etag event-id)
   "Refresh OAuth access and call FUN after that.
-Pass SKIP-EXPORT, START, END, SMRY, LOC, DESC.  and EVENT-ID to FUN if
+Pass SKIP-IMPORT, SKIP-EXPORT, START, END, SMRY, LOC, DESC.  and EVENT-ID to FUN if
 needed. For handling of MARKER see docstring for the function referenced by FUN."
   (deferred:$
     (request-deferred
@@ -485,7 +491,8 @@ needed. For handling of MARKER see docstring for the function referenced by FUN.
                 calendar-id event-id (plist-get token :access_token)))
               ((eq fun 'org-gcal--post-event)
                (org-gcal--post-event
-                start end smry loc desc calendar-id marker etag event-id (plist-get token :access_token)))
+                start end smry loc desc calendar-id marker etag event-id (plist-get token :access_token)
+                skip-import skip-export))
               ((eq fun 'org-gcal--delete-event)
                (org-gcal--delete-event calendar-id event-id etag marker (plist-get token :access_token))))))))
 
@@ -814,7 +821,7 @@ object."
               (deferred:next
                 (lambda ()
                   (org-gcal-refresh-token 'org-gcal--get-event
-                                              nil nil nil nil nil nil nil calendar-id nil event-id))))
+                                          nil nil nil nil nil nil nil nil calendar-id nil event-id))))
              ;; Generic error-handler meant to provide useful information about
              ;; failure cases not otherwise explicitly specified.
              ((not (eq error-msg nil))
@@ -890,25 +897,27 @@ Returns a ‘deferred’ object that can be used to wait for completion."
               (deferred:next
                 (lambda ()
                   (org-gcal-refresh-token 'org-gcal--post-event
-                                              skip-export start end smry loc desc marker calendar-id etag event-id))))
+                                          skip-import skip-export start end smry
+                                          loc desc marker calendar-id etag event-id))))
              ;; ETag on current entry is stale. This means the event on the
              ;; server has been updated. In that case, update the event using
              ;; the data from the server.
              ((eq status 412)
-              (org-gcal--notify
-               "Received HTTP 412"
-               "ETag stale - will overwrite this entry with event from server.")
-              (deferred:$
-                (org-gcal--get-event calendar-id event-id a-token)
-                (deferred:nextc it
-                  (lambda (response)
-                    (save-excursion
-                      (with-current-buffer (marker-buffer marker)
-                        (goto-char (marker-position marker))
-                        (set-marker marker nil)
-                        (org-gcal--update-entry
-                         calendar-id
-                         (request-response-data response))))))))
+              (unless skip-import
+                (org-gcal--notify
+                 "Received HTTP 412"
+                 "ETag stale - will overwrite this entry with event from server.")
+                (deferred:$
+                  (org-gcal--get-event calendar-id event-id a-token)
+                  (deferred:nextc it
+                    (lambda (response)
+                      (save-excursion
+                        (with-current-buffer (marker-buffer marker)
+                          (goto-char (marker-position marker))
+                          (set-marker marker nil)
+                          (org-gcal--update-entry
+                           calendar-id
+                           (request-response-data response)))))))))
              ;; Generic error-handler meant to provide useful information about
              ;; failure cases not otherwise explicitly specified.
              ((not (eq error-msg nil))
@@ -918,16 +927,17 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                (pp-to-string error-msg)))
              ;; Fetch was successful.
              (t
-              (let* ((data (request-response-data response)))
-                (save-excursion
-                  (with-current-buffer (marker-buffer marker)
-                    (goto-char (marker-position marker))
-                    (set-marker marker nil)
-                    (org-set-property
-                     org-gcal-etag-property
-                     (plist-get data :etag))))
-                (org-gcal--notify "Event Posted"
-                                      (concat "Org-gcal post event\n  " (plist-get data :summary))))))))))))
+              (unless skip-export
+                (let* ((data (request-response-data response)))
+                  (save-excursion
+                    (with-current-buffer (marker-buffer marker)
+                      (goto-char (marker-position marker))
+                      (set-marker marker nil)
+                      (org-set-property
+                       org-gcal-etag-property
+                       (plist-get data :etag))))
+                  (org-gcal--notify "Event Posted"
+                                        (concat "Org-gcal post event\n  " (plist-get data :summary)))))))))))))
 
 
 (defun org-gcal--delete-event (calendar-id event-id etag marker &optional a-token)
@@ -980,7 +990,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
               (deferred:next
                 (lambda ()
                   (org-gcal-refresh-token 'org-gcal--delete-event
-                                              nil nil nil nil nil nil marker calendar-id etag event-id))))
+                                          nil nil nil nil nil nil nil marker calendar-id etag event-id))))
              ;; ETag on current entry is stale. This means the event on the
              ;; server has been updated. In that case, update the event using
              ;; the data from the server.
