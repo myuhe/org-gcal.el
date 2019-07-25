@@ -247,7 +247,7 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                                         ;; the current point.
                                         (if skip-export
                                             (org-gcal--update-entry (car x) event)
-                                          (org-gcal-post-at-point 'skip-import)))
+                                          (org-gcal-post-at-point 'skip-import skip-export)))
                                       (set-marker marker nil))
                                   ;; Otherwise, insert a new entry into the
                                   ;; default fetch file.
@@ -270,6 +270,37 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
   "Fetch event data from google calendar."
   (interactive)
   (org-gcal-sync nil t))
+
+;;;###autoload
+(defun org-gcal-sync-buffer (&optional a-token skip-export silent)
+  "\
+Sync entries containing Calendar events in the currently-visible portion of the
+buffer.
+
+Uses access token A-TOKEN if non-nil.
+Updates events on the server unless SKIP-EXPORT is set. In this case, events
+modified on the server will overwrite entries in the buffer.
+Set SILENT to non-nil to inhibit notifications."
+  (interactive)
+  (org-gcal--ensure-token)
+  (save-excursion
+    (goto-char (point-min))
+    (while (re-search-forward
+            (format "^[ \t]*:%s:[ \t]*$" org-gcal-drawer-name)
+            (point-max)
+            'noerror)
+      (org-gcal-post-at-point 'skip-import skip-export)))
+  (unless silent
+    (org-gcal--notify "Completed syncing events in buffer."
+                          (concat "Events synced in\n" (buffer-file-name)))))
+
+;;;###autoload
+(defun org-gcal-fetch-buffer (&optional a-token skip-export silent)
+  "\
+Fetch changes to events in the currently-visible portion of the buffer, not
+writing any changes to Calendar."
+  (interactive)
+  (org-gcal-sync-buffer nil t))
 
 (defun org-gcal--filter (items)
   "Filter ITEMS on an AND of `org-gcal-fetch-event-filters' functions.
