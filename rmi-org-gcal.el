@@ -207,7 +207,7 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                            (rmi-org-gcal-refresh-token 'rmi-org-gcal-sync skip-export))))
                       ((eq 403 status)
                        (rmi-org-gcal--notify "Received HTTP 403"
-                                         "Ensure you enabled the Calendar API through the Developers Console, then try again.")
+                                             "Ensure you enabled the Calendar API through the Developers Console, then try again.")
                        (deferred:nextc it
                          (lambda()
                            (rmi-org-gcal-refresh-token 'rmi-org-gcal-sync skip-export))))
@@ -227,24 +227,6 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                       ;; Fetch was successful.
                       (t
                        (with-current-buffer (find-file-noselect (cdr x))
-                         (unless skip-export
-                           (save-excursion
-                             (cl-loop with buf = (find-file-noselect rmi-org-gcal-token-file)
-                                      for local-event in (rmi-org-gcal--parse-id (cdr x))
-                                      for pos in (rmi-org-gcal--headline-list (cdr x))
-                                      when (or
-                                            (eq (car local-event) nil)
-                                            (not (string= (cdr local-event)
-                                                          (cdr (assoc (caar local-event)
-                                                                      (with-current-buffer buf
-                                                                        (plist-get (read (buffer-string)) (intern (concat ":" (car x))))))))))
-                                      do
-                                      (goto-char pos)
-                                      (rmi-org-gcal-post-at-point t)
-                                      finally
-                                      (kill-buffer buf))
-                             (sit-for 2)
-                             (rmi-org-gcal-sync nil t t)))
                          (goto-char (point-max))
                          (let ((items (rmi-org-gcal--filter (plist-get (request-response-data response) :items))))
                            (mapcar
@@ -258,7 +240,14 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                                     (save-excursion
                                       (with-current-buffer (marker-buffer marker)
                                         (goto-char (marker-position marker))
-                                        (rmi-org-gcal--update-entry (car x) event))
+                                        ;; If skipping exports, just overwrite
+                                        ;; current entry's calendar data with
+                                        ;; what's been retrieved from the
+                                        ;; server. Otherwise, sync the entry at
+                                        ;; the current point.
+                                        (if skip-export
+                                            (rmi-org-gcal--update-entry (car x) event)
+                                          (rmi-org-gcal-post-at-point 'skip-import)))
                                       (set-marker marker nil))
                                   ;; Otherwise, insert a new entry into the
                                   ;; default fetch file.
@@ -267,14 +256,14 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                             items)
                            ;; Update token file.
                            (let ((token (with-temp-buffer (insert-file-contents rmi-org-gcal-token-file)
-                                                         (read (buffer-string)))))
+                                                          (read (buffer-string)))))
                              (with-temp-file rmi-org-gcal-token-file
                                (pp token (current-buffer)))))
                          (org-set-startup-visibility)
                          (save-buffer))
                        (unless silent
                          (rmi-org-gcal--notify "Completed event fetching ."
-                                           (concat "Fetched data overwrote\n" (cdr x)))))))))))))
+                                               (concat "Events fetched into\n" (cdr x)))))))))))))
 
 ;;;###autoload
 (defun rmi-org-gcal-fetch ()
