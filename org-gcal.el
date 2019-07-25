@@ -1,4 +1,4 @@
-;;; rmi-org-gcal.el --- Org sync with Google Calendar -*- lexical-binding: t -*-
+;;; org-gcal.el --- Org sync with Google Calendar -*- lexical-binding: t -*-
 
 ;; Author: myuhe <yuhei.maeda_at_gmail.com>
 ;; URL: https://github.com/kidd/org-gcal.el
@@ -25,10 +25,10 @@
 
 ;;; Commentary:
 ;;
-;; Put the rmi-org-gcal.el to your
+;; Put the org-gcal.el to your
 ;; load-path.
 ;; Add to .emacs:
-;; (require 'rmi-org-gcal)
+;; (require 'org-gcal)
 ;;
 ;;; Changelog:
 ;; 2014-01-03 Initial release.
@@ -43,140 +43,140 @@
 ;; Customization
 ;;; Code:
 
-(defgroup rmi-org-gcal nil "Org sync with Google Calendar"
+(defgroup org-gcal nil "Org sync with Google Calendar"
   :tag "Org google calendar"
   :group 'org)
 
-(defcustom rmi-org-gcal-up-days 30
+(defcustom org-gcal-up-days 30
   "Number of days to get events before today."
-  :group 'rmi-org-gcal
+  :group 'org-gcal
   :type 'integer)
 
-(defcustom rmi-org-gcal-down-days 60
+(defcustom org-gcal-down-days 60
   "Number of days to get events after today."
-  :group 'rmi-org-gcal
+  :group 'org-gcal
   :type 'integer)
 
-(defcustom rmi-org-gcal-auto-archive t
+(defcustom org-gcal-auto-archive t
   "If non-nil, old events archive automatically."
-  :group 'rmi-org-gcal
+  :group 'org-gcal
   :type 'boolean)
 
-(defcustom rmi-org-gcal-dir
-  (concat user-emacs-directory "rmi-org-gcal/")
+(defcustom org-gcal-dir
+  (concat user-emacs-directory "org-gcal/")
   "File in which to save token."
-  :group 'rmi-org-gcal
+  :group 'org-gcal
   :type 'string)
 
-(defcustom rmi-org-gcal-token-file
-  (expand-file-name ".rmi-org-gcal-token" rmi-org-gcal-dir)
+(defcustom org-gcal-token-file
+  (expand-file-name ".org-gcal-token" org-gcal-dir)
   "File in which to save token."
-  :group 'rmi-org-gcal
+  :group 'org-gcal
   :type 'string)
 
-(defcustom rmi-org-gcal-client-id nil
+(defcustom org-gcal-client-id nil
   "Client ID for OAuth."
-  :group 'rmi-org-gcal
+  :group 'org-gcal
   :type 'string)
 
-(defcustom rmi-org-gcal-client-secret nil
+(defcustom org-gcal-client-secret nil
   "Google calendar secret key for OAuth."
-  :group 'rmi-org-gcal
+  :group 'org-gcal
   :type 'string)
 
-(defcustom rmi-org-gcal-fetch-file-alist nil
+(defcustom org-gcal-fetch-file-alist nil
   "\
-Association list '(calendar-id file). For each calendar-id,‘rmi-org-gcal-fetch’
-and ‘rmi-org-gcal-sync’ will retrieve new events on the calendar and insert
+Association list '(calendar-id file). For each calendar-id,‘org-gcal-fetch’
+and ‘org-gcal-sync’ will retrieve new events on the calendar and insert
 them into the file."
-  :group 'rmi-org-gcal
+  :group 'org-gcal
   :type '(alist :key-type (string :tag "Calendar Id") :value-type (file :tag "Org file")))
 
-(defvaralias 'rmi-org-gcal-file-alist 'rmi-org-gcal-fetch-file-alist)
+(defvaralias 'org-gcal-file-alist 'org-gcal-fetch-file-alist)
 
-(defcustom rmi-org-gcal-logo-file nil
+(defcustom org-gcal-logo-file nil
   "Org-gcal logo image filename to display in notifications."
-  :group 'rmi-org-gcal
+  :group 'org-gcal
   :type 'file)
 
-(defcustom rmi-org-gcal-fetch-event-filters '()
+(defcustom org-gcal-fetch-event-filters '()
   "Predicate functions to filter calendar events.
 Predicate functions take an event, and if they return nil the
    event will not be fetched."
-  :group 'rmi-org-gcal
+  :group 'org-gcal
   :type 'list)
 
-(defcustom rmi-org-gcal-notify-p t
+(defcustom org-gcal-notify-p t
   "If nil no more alert messages are shown for status updates."
-  :group 'rmi-org-gcal
+  :group 'org-gcal
   :type 'boolean)
 
-(defcustom rmi-org-gcal-calendar-id-property "calendar-id"
+(defcustom org-gcal-calendar-id-property "calendar-id"
   "\
 Org-mode property on org-gcal entries that records the Calendar ID."
-  :group 'rmi-org-gcal
+  :group 'org-gcal
   :type 'string)
 
-(defcustom rmi-org-gcal-etag-property "ETag"
+(defcustom org-gcal-etag-property "ETag"
   "\
 Org-mode property on org-gcal entries that records the ETag."
-  :group 'rmi-org-gcal
+  :group 'org-gcal
   :type 'string)
 
-(defcustom rmi-org-gcal-drawer-name "org-gcal"
+(defcustom org-gcal-drawer-name "org-gcal"
   "\
 Name of drawer in which event time and description are stored on org-gcal
 entries."
-  :group 'rmi-org-gcal
+  :group 'org-gcal
   :type 'string)
 
-(defvar rmi-org-gcal-token-plist nil
+(defvar org-gcal-token-plist nil
   "Token plist.")
 
-(defconst rmi-org-gcal-auth-url "https://accounts.google.com/o/oauth2/auth"
+(defconst org-gcal-auth-url "https://accounts.google.com/o/oauth2/auth"
   "Google OAuth2 server URL.")
 
-(defconst rmi-org-gcal-token-url "https://www.googleapis.com/oauth2/v3/token"
+(defconst org-gcal-token-url "https://www.googleapis.com/oauth2/v3/token"
   "Google OAuth2 server URL.")
 
-(defconst rmi-org-gcal-resource-url "https://www.googleapis.com/auth/calendar"
+(defconst org-gcal-resource-url "https://www.googleapis.com/auth/calendar"
   "URL used to request access to calendar resources.")
 
-(defconst rmi-org-gcal-events-url "https://www.googleapis.com/calendar/v3/calendars/%s/events")
+(defconst org-gcal-events-url "https://www.googleapis.com/calendar/v3/calendars/%s/events")
 
 ;;;###autoload
-(defun rmi-org-gcal-sync (&optional a-token skip-export silent)
+(defun org-gcal-sync (&optional a-token skip-export silent)
   "Import events from calendars.
 Using A-TOKEN and export the ones to the calendar if unless
 SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
   (interactive)
-  (rmi-org-gcal--ensure-token)
-  (when rmi-org-gcal-auto-archive
-    (dolist (i rmi-org-gcal-fetch-file-alist)
+  (org-gcal--ensure-token)
+  (when org-gcal-auto-archive
+    (dolist (i org-gcal-fetch-file-alist)
       (with-current-buffer
           (find-file-noselect (cdr i))
-        (rmi-org-gcal--archive-old-event))))
-  (cl-loop for x in rmi-org-gcal-fetch-file-alist
+        (org-gcal--archive-old-event))))
+  (cl-loop for x in org-gcal-fetch-file-alist
            do
            (let ((x x)
                  (a-token (if a-token
                               a-token
-                            (rmi-org-gcal--get-access-token)))
+                            (org-gcal--get-access-token)))
 
                  (skip-export skip-export)
                  (silent silent))
              (deferred:$
                (request-deferred
-                (format rmi-org-gcal-events-url (car x))
+                (format org-gcal-events-url (car x))
                 :type "GET"
                 :params `(("access_token" . ,a-token)
-                          ("key" . ,rmi-org-gcal-client-secret)
+                          ("key" . ,org-gcal-client-secret)
                           ("singleEvents" . "True")
                           ("orderBy" . "startTime")
-                          ("timeMin" . ,(rmi-org-gcal--subtract-time))
-                          ("timeMax" . ,(rmi-org-gcal--add-time))
+                          ("timeMin" . ,(org-gcal--subtract-time))
+                          ("timeMax" . ,(org-gcal--add-time))
                           ("grant_type" . "authorization_code"))
-                :parser 'rmi-org-gcal--json-read
+                :parser 'org-gcal--json-read
                 :error
                 (cl-function (lambda (&key error-thrown &allow-other-keys)
                                (message "Got error: %S" error-thrown))))
@@ -190,7 +190,7 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                       ;; If there is no network connectivity, the response will
                       ;; not include a status code.
                       ((eq status nil)
-                       (rmi-org-gcal--notify
+                       (org-gcal--notify
                         "Got Error"
                         "Could not contact remote service. Please check your network connectivity."))
                       ;; Receiving a 403 response could mean that the calendar
@@ -199,36 +199,36 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                       ;; takes care of that step.
                       ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
                                    status))
-                       (rmi-org-gcal--notify
+                       (org-gcal--notify
                         "Received HTTP 401"
                         "OAuth token expired. Now trying to refresh-token")
                        (deferred:next
                          (lambda()
-                           (rmi-org-gcal-refresh-token 'rmi-org-gcal-sync skip-export))))
+                           (org-gcal-refresh-token 'org-gcal-sync skip-export))))
                       ((eq 403 status)
-                       (rmi-org-gcal--notify "Received HTTP 403"
+                       (org-gcal--notify "Received HTTP 403"
                                              "Ensure you enabled the Calendar API through the Developers Console, then try again.")
                        (deferred:nextc it
                          (lambda()
-                           (rmi-org-gcal-refresh-token 'rmi-org-gcal-sync skip-export))))
+                           (org-gcal-refresh-token 'org-gcal-sync skip-export))))
                       ;; We got some 2xx response, but for some reason no
                       ;; message body.
                       ((and (> 299 status) (eq temp nil))
-                       (rmi-org-gcal--notify
+                       (org-gcal--notify
                         (concat "Received HTTP" (number-to-string status))
                         "Error occured, but no message body."))
                       ((not (eq error-msg nil))
                        ;; Generic error-handler meant to provide useful
                        ;; information about failure cases not otherwise
                        ;; explicitly specified.
-                       (rmi-org-gcal--notify
+                       (org-gcal--notify
                         (concat "Status code: " (number-to-string status))
                         (pp-to-string error-msg)))
                       ;; Fetch was successful.
                       (t
                        (with-current-buffer (find-file-noselect (cdr x))
                          (goto-char (point-max))
-                         (let ((items (rmi-org-gcal--filter (plist-get (request-response-data response) :items))))
+                         (let ((items (org-gcal--filter (plist-get (request-response-data response) :items))))
                            (mapcar
                             (lambda (event)
                               (let ((marker (org-id-find (plist-get event :id) 'markerp)))
@@ -246,53 +246,53 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                                         ;; server. Otherwise, sync the entry at
                                         ;; the current point.
                                         (if skip-export
-                                            (rmi-org-gcal--update-entry (car x) event)
-                                          (rmi-org-gcal-post-at-point 'skip-import)))
+                                            (org-gcal--update-entry (car x) event)
+                                          (org-gcal-post-at-point 'skip-import)))
                                       (set-marker marker nil))
                                   ;; Otherwise, insert a new entry into the
                                   ;; default fetch file.
                                   (insert "\n* ")
-                                  (rmi-org-gcal--update-entry (car x) event))))
+                                  (org-gcal--update-entry (car x) event))))
                             items)
                            ;; Update token file.
-                           (let ((token (with-temp-buffer (insert-file-contents rmi-org-gcal-token-file)
+                           (let ((token (with-temp-buffer (insert-file-contents org-gcal-token-file)
                                                           (read (buffer-string)))))
-                             (with-temp-file rmi-org-gcal-token-file
+                             (with-temp-file org-gcal-token-file
                                (pp token (current-buffer)))))
                          (org-set-startup-visibility)
                          (save-buffer))
                        (unless silent
-                         (rmi-org-gcal--notify "Completed event fetching ."
+                         (org-gcal--notify "Completed event fetching ."
                                                (concat "Events fetched into\n" (cdr x)))))))))))))
 
 ;;;###autoload
-(defun rmi-org-gcal-fetch ()
+(defun org-gcal-fetch ()
   "Fetch event data from google calendar."
   (interactive)
-  (rmi-org-gcal-sync nil t))
+  (org-gcal-sync nil t))
 
-(defun rmi-org-gcal--filter (items)
-  "Filter ITEMS on an AND of `rmi-org-gcal-fetch-event-filters' functions.
+(defun org-gcal--filter (items)
+  "Filter ITEMS on an AND of `org-gcal-fetch-event-filters' functions.
 Run each element from ITEMS through all of the filters.  If any
 filter returns NIL, discard the item."
-  (if rmi-org-gcal-fetch-event-filters
+  (if org-gcal-fetch-event-filters
       (cl-remove-if
        (lambda (item)
          (and (member nil
                       (mapcar (lambda (filter-func)
-                                (funcall filter-func item)) rmi-org-gcal-fetch-event-filters))
+                                (funcall filter-func item)) org-gcal-fetch-event-filters))
               t))
        items)
     items))
 
-(defun rmi-org-gcal--headline-list (file)
+(defun org-gcal--headline-list (file)
   "Return positions for all headlines of FILE."
   (let ((buf (find-file-noselect file)))
     (with-current-buffer buf
       (org-element-map (org-element-parse-buffer) 'headline
         (lambda (hl) (org-element-property :begin hl))))))
 
-(defun rmi-org-gcal--parse-id (file)
+(defun org-gcal--parse-id (file)
   "Return a list of conses (ID . entry) of file FILE."
   (let ((buf (find-file-noselect file)))
     (with-current-buffer buf
@@ -309,19 +309,19 @@ filter returns NIL, discard the item."
                                  (org-element-map (org-element-at-point) 'headline
                                    (lambda (hl) (org-element-property :end hl)))))))))))
 
-(defun rmi-org-gcal--property-from-name (name)
+(defun org-gcal--property-from-name (name)
   "\
 Converts property names (as strings) to a symbol suitable for use as the
 PROPERTY argument to ‘org-element-property’."
   (intern (concat ":" (upcase name))))
 
 ;;;###autoload
-(defun rmi-org-gcal-post-at-point (&optional skip-import)
+(defun org-gcal-post-at-point (&optional skip-import)
   "Post entry at point to current calendar.
 If SKIP-IMPORT is not nil, do not import events from the
 current calendar."
   (interactive)
-  (rmi-org-gcal--ensure-token)
+  (org-gcal--ensure-token)
   (save-excursion
     (end-of-line)
     (org-back-to-heading)
@@ -332,18 +332,18 @@ current calendar."
            (loc (org-element-property :LOCATION elem))
            (id (org-element-property :ID elem))
            (etag (org-element-property
-                  (rmi-org-gcal--property-from-name rmi-org-gcal-etag-property)
+                  (org-gcal--property-from-name org-gcal-etag-property)
                   elem))
            (calendar-id
             (org-element-property
-             (rmi-org-gcal--property-from-name rmi-org-gcal-calendar-id-property)
+             (org-gcal--property-from-name org-gcal-calendar-id-property)
              elem))
            (tobj) (start) (end) (desc))
       ;; Parse :org-gcal: drawer for event time and description.
       (goto-char (marker-position marker))
       (when
           (re-search-forward
-            (format "^[ \t]*:%s:[ \t]*$" rmi-org-gcal-drawer-name)
+            (format "^[ \t]*:%s:[ \t]*$" org-gcal-drawer-name)
             (save-excursion (outline-next-heading) (point))
             'noerror)
         ;; The event time is located at the beginning of the drawer.
@@ -372,7 +372,7 @@ current calendar."
                    ""
                    desc))))
            start
-            (rmi-org-gcal--format-org2iso
+            (org-gcal--format-org2iso
              (plist-get (cadr tobj) :year-start)
              (plist-get (cadr tobj) :month-start)
              (plist-get (cadr tobj) :day-start)
@@ -381,7 +381,7 @@ current calendar."
              (when (plist-get (cadr tobj) :hour-start)
                t))
            end
-            (rmi-org-gcal--format-org2iso
+            (org-gcal--format-org2iso
                  (plist-get (cadr tobj) :year-end)
                  (plist-get (cadr tobj) :month-end)
                  (plist-get (cadr tobj) :day-end)
@@ -390,13 +390,13 @@ current calendar."
                  (when (plist-get (cadr tobj) :hour-start)
                    t
                    ""))))
-      (rmi-org-gcal--post-event start end smry loc desc calendar-id marker etag id nil skip-import))))
+      (org-gcal--post-event start end smry loc desc calendar-id marker etag id nil skip-import))))
 
 ;;;###autoload
-(defun rmi-org-gcal-delete-at-point ()
+(defun org-gcal-delete-at-point ()
   "Delete entry at point to current calendar."
   (interactive)
-  (rmi-org-gcal--ensure-token)
+  (org-gcal--ensure-token)
   (save-excursion
     (end-of-line)
     (org-back-to-heading)
@@ -405,97 +405,97 @@ current calendar."
            (smry (org-element-property :title elem))
            (calendar-id
             (org-element-property
-             (rmi-org-gcal--property-from-name rmi-org-gcal-calendar-id-property)
+             (org-gcal--property-from-name org-gcal-calendar-id-property)
              elem))
            (etag (org-element-property
-                  (rmi-org-gcal--property-from-name rmi-org-gcal-etag-property)
+                  (org-gcal--property-from-name org-gcal-etag-property)
                   elem))
            (event-id (org-element-property :ID elem)))
       (when (and event-id
                  (y-or-n-p (format "Do you really want to delete event?\n\n%s\n\n" smry)))
-        (rmi-org-gcal--delete-event calendar-id event-id etag marker)))))
+        (org-gcal--delete-event calendar-id event-id etag marker)))))
 
-(defun rmi-org-gcal-request-authorization ()
+(defun org-gcal-request-authorization ()
   "Request OAuth authorization at AUTH-URL by launching `browse-url'.
 CLIENT-ID is the client id provided by the provider.
 It returns the code provided by the service."
-  (browse-url (concat rmi-org-gcal-auth-url
-                      "?client_id=" (url-hexify-string rmi-org-gcal-client-id)
+  (browse-url (concat org-gcal-auth-url
+                      "?client_id=" (url-hexify-string org-gcal-client-id)
                       "&response_type=code"
                       "&redirect_uri=" (url-hexify-string "urn:ietf:wg:oauth:2.0:oob")
-                      "&scope=" (url-hexify-string rmi-org-gcal-resource-url)))
+                      "&scope=" (url-hexify-string org-gcal-resource-url)))
   (read-string "Enter the code your browser displayed: "))
 
-(defun rmi-org-gcal-request-token ()
+(defun org-gcal-request-token ()
   "Refresh OAuth access at TOKEN-URL."
   (request
-   rmi-org-gcal-token-url
+   org-gcal-token-url
    :type "POST"
-   :data `(("client_id" . ,rmi-org-gcal-client-id)
-           ("client_secret" . ,rmi-org-gcal-client-secret)
-           ("code" . ,(rmi-org-gcal-request-authorization))
+   :data `(("client_id" . ,org-gcal-client-id)
+           ("client_secret" . ,org-gcal-client-secret)
+           ("code" . ,(org-gcal-request-authorization))
            ("redirect_uri" .  "urn:ietf:wg:oauth:2.0:oob")
            ("grant_type" . "authorization_code"))
-   :parser 'rmi-org-gcal--json-read
+   :parser 'org-gcal--json-read
    :success (cl-function
              (lambda (&key data &allow-other-keys)
                (when data
-                 (setq rmi-org-gcal-token-plist data)
-                 (rmi-org-gcal--save-sexp data rmi-org-gcal-token-file))))
+                 (setq org-gcal-token-plist data)
+                 (org-gcal--save-sexp data org-gcal-token-file))))
    :error
    (cl-function (lambda (&key error-thrown &allow-other-keys)
                   (message "Got error: %S" error-thrown)))))
 
-(defun rmi-org-gcal-refresh-token (&optional fun skip-export start end smry loc desc marker calendar-id etag event-id)
+(defun org-gcal-refresh-token (&optional fun skip-export start end smry loc desc marker calendar-id etag event-id)
   "Refresh OAuth access and call FUN after that.
 Pass SKIP-EXPORT, START, END, SMRY, LOC, DESC.  and EVENT-ID to FUN if
 needed. For handling of MARKER see docstring for the function referenced by FUN."
   (deferred:$
     (request-deferred
-     rmi-org-gcal-token-url
+     org-gcal-token-url
      :type "POST"
-     :data `(("client_id" . ,rmi-org-gcal-client-id)
-             ("client_secret" . ,rmi-org-gcal-client-secret)
-             ("refresh_token" . ,(rmi-org-gcal--get-refresh-token))
+     :data `(("client_id" . ,org-gcal-client-id)
+             ("client_secret" . ,org-gcal-client-secret)
+             ("refresh_token" . ,(org-gcal--get-refresh-token))
              ("grant_type" . "refresh_token"))
-     :parser 'rmi-org-gcal--json-read
+     :parser 'org-gcal--json-read
      :error
      (cl-function (lambda (&key error-thrown &allow-other-keys)
                     (message "Got error: %S" error-thrown))))
     (deferred:nextc it
       (lambda (response)
         (let ((temp (request-response-data response)))
-          (plist-put rmi-org-gcal-token-plist
+          (plist-put org-gcal-token-plist
                      :access_token
                      (plist-get temp :access_token))
-          (rmi-org-gcal--save-sexp rmi-org-gcal-token-plist rmi-org-gcal-token-file)
-          rmi-org-gcal-token-plist)))
+          (org-gcal--save-sexp org-gcal-token-plist org-gcal-token-file)
+          org-gcal-token-plist)))
     (deferred:nextc it
       (lambda (token)
-        (cond ((eq fun 'rmi-org-gcal-sync)
-               (rmi-org-gcal-sync (plist-get token :access_token) skip-export))
-              ((eq fun 'rmi-org-gcal--get-event)
-               (rmi-org-gcal--get-event
+        (cond ((eq fun 'org-gcal-sync)
+               (org-gcal-sync (plist-get token :access_token) skip-export))
+              ((eq fun 'org-gcal--get-event)
+               (org-gcal--get-event
                 calendar-id event-id (plist-get token :access_token)))
-              ((eq fun 'rmi-org-gcal--post-event)
-               (rmi-org-gcal--post-event
+              ((eq fun 'org-gcal--post-event)
+               (org-gcal--post-event
                 start end smry loc desc calendar-id marker etag event-id (plist-get token :access_token)))
-              ((eq fun 'rmi-org-gcal--delete-event)
-               (rmi-org-gcal--delete-event calendar-id event-id etag marker (plist-get token :access_token))))))))
+              ((eq fun 'org-gcal--delete-event)
+               (org-gcal--delete-event calendar-id event-id etag marker (plist-get token :access_token))))))))
 
 ;; Internal
-(defun rmi-org-gcal--archive-old-event ()
+(defun org-gcal--archive-old-event ()
   (save-excursion
     (goto-char (point-min))
     (while (re-search-forward org-heading-regexp nil t)
       (condition-case nil
-          (goto-char (cdr (rmi-org-gcal--timestamp-successor)))
+          (goto-char (cdr (org-gcal--timestamp-successor)))
         (error (error "Org-gcal error: Couldn't parse %s"
                       (buffer-file-name))))
       (let ((elem (org-element-headline-parser (point-max) t))
             (tobj (cadr (org-element-timestamp-parser))))
         (when (>
-               (time-to-seconds (time-subtract (current-time) (days-to-time rmi-org-gcal-up-days)))
+               (time-to-seconds (time-subtract (current-time) (days-to-time org-gcal-up-days)))
                (time-to-seconds (encode-time 0  (if (plist-get tobj :minute-end)
                                                     (plist-get tobj :minute-end) 0)
                                              (if (plist-get tobj :hour-end)
@@ -503,14 +503,14 @@ needed. For handling of MARKER see docstring for the function referenced by FUN.
                                              (plist-get tobj :day-end)
                                              (plist-get tobj :month-end)
                                              (plist-get tobj :year-end))))
-          (rmi-org-gcal--notify "Archived event." (org-element-property :title elem))
+          (org-gcal--notify "Archived event." (org-element-property :title elem))
           (let ((kill-ring kill-ring)
                 (select-enable-clipboard nil))
             (org-archive-subtree)))))
     (save-buffer)))
 
-(defun rmi-org-gcal--save-sexp (data file)
-  (if (file-directory-p rmi-org-gcal-dir)
+(defun org-gcal--save-sexp (data file)
+  (if (file-directory-p org-gcal-dir)
       (if (file-exists-p file)
           (if  (plist-get (read (buffer-string)) :token)
               (with-temp-file file
@@ -522,10 +522,10 @@ needed. For handling of MARKER see docstring for the function referenced by FUN.
           (with-temp-file file
             (pp `(:token ,data :elem nil) (current-buffer)))))
     (progn
-      (make-directory rmi-org-gcal-dir)
-      (rmi-org-gcal--save-sexp data file))))
+      (make-directory org-gcal-dir)
+      (org-gcal--save-sexp data file))))
 
-(defun rmi-org-gcal--json-read ()
+(defun org-gcal--json-read ()
   (let ((json-object-type 'plist))
     (goto-char (point-min))
     (re-search-forward "^{" nil t)
@@ -535,31 +535,31 @@ needed. For handling of MARKER see docstring for the function referenced by FUN.
      (decode-coding-string
       (buffer-substring-no-properties (point-min) (point-max)) 'utf-8))))
 
-(defun rmi-org-gcal--get-refresh-token ()
-  (if rmi-org-gcal-token-plist
-      (plist-get rmi-org-gcal-token-plist :refresh_token)
+(defun org-gcal--get-refresh-token ()
+  (if org-gcal-token-plist
+      (plist-get org-gcal-token-plist :refresh_token)
     (progn
-      (if (file-exists-p rmi-org-gcal-token-file)
+      (if (file-exists-p org-gcal-token-file)
           (progn
-            (with-temp-buffer (insert-file-contents rmi-org-gcal-token-file)
+            (with-temp-buffer (insert-file-contents org-gcal-token-file)
                               (plist-get (plist-get (read (buffer-string)) :token) :refresh_token)))
-        (rmi-org-gcal--notify
-         (concat rmi-org-gcal-token-file " is not exists")
-         (concat "Make" rmi-org-gcal-token-file))))))
+        (org-gcal--notify
+         (concat org-gcal-token-file " is not exists")
+         (concat "Make" org-gcal-token-file))))))
 
-(defun rmi-org-gcal--get-access-token ()
-  (if rmi-org-gcal-token-plist
-      (plist-get rmi-org-gcal-token-plist :access_token)
+(defun org-gcal--get-access-token ()
+  (if org-gcal-token-plist
+      (plist-get org-gcal-token-plist :access_token)
     (progn
-      (if (file-exists-p rmi-org-gcal-token-file)
+      (if (file-exists-p org-gcal-token-file)
           (progn
-            (with-temp-buffer (insert-file-contents rmi-org-gcal-token-file)
+            (with-temp-buffer (insert-file-contents org-gcal-token-file)
                               (plist-get (plist-get (read (buffer-string)) :token) :access_token)))
-        (rmi-org-gcal--notify
-         (concat rmi-org-gcal-token-file " is not exists")
-         (concat "Make " rmi-org-gcal-token-file))))))
+        (org-gcal--notify
+         (concat org-gcal-token-file " is not exists")
+         (concat "Make " org-gcal-token-file))))))
 
-(defun rmi-org-gcal--safe-substring (string from &optional to)
+(defun org-gcal--safe-substring (string from &optional to)
   "Call the `substring' function safely.
 No errors will be returned for out of range values of FROM and
 TO.  Instead an empty string is returned."
@@ -575,9 +575,9 @@ TO.  Instead an empty string is returned."
         ""
       (substring string from to))))
 
-(defun rmi-org-gcal--alldayp (s e)
-  (let ((slst (rmi-org-gcal--parse-date s))
-        (elst (rmi-org-gcal--parse-date e)))
+(defun org-gcal--alldayp (s e)
+  (let ((slst (org-gcal--parse-date s))
+        (elst (org-gcal--parse-date e)))
     (and
      (= (length s) 10)
      (= (length e) 10)
@@ -592,41 +592,41 @@ TO.  Instead an empty string is returned."
                          (plist-get slst :mon)
                          (plist-get slst :year)))) 86400))))
 
-(defun rmi-org-gcal--parse-date (str)
-  (list :year (string-to-number  (rmi-org-gcal--safe-substring str 0 4))
-        :mon  (string-to-number (rmi-org-gcal--safe-substring str 5 7))
-        :day  (string-to-number (rmi-org-gcal--safe-substring str 8 10))
-        :hour (string-to-number (rmi-org-gcal--safe-substring str 11 13))
-        :min  (string-to-number (rmi-org-gcal--safe-substring str 14 16))
-        :sec  (string-to-number (rmi-org-gcal--safe-substring str 17 19))))
+(defun org-gcal--parse-date (str)
+  (list :year (string-to-number  (org-gcal--safe-substring str 0 4))
+        :mon  (string-to-number (org-gcal--safe-substring str 5 7))
+        :day  (string-to-number (org-gcal--safe-substring str 8 10))
+        :hour (string-to-number (org-gcal--safe-substring str 11 13))
+        :min  (string-to-number (org-gcal--safe-substring str 14 16))
+        :sec  (string-to-number (org-gcal--safe-substring str 17 19))))
 
-(defun rmi-org-gcal--adjust-date (fn day)
+(defun org-gcal--adjust-date (fn day)
   (format-time-string "%Y-%m-%dT%H:%M:%SZ"
                       (funcall fn (current-time) (days-to-time day)) t))
 
-(defun rmi-org-gcal--add-time ()
-  (rmi-org-gcal--adjust-date 'time-add rmi-org-gcal-down-days))
+(defun org-gcal--add-time ()
+  (org-gcal--adjust-date 'time-add org-gcal-down-days))
 
-(defun rmi-org-gcal--subtract-time ()
-  (rmi-org-gcal--adjust-date 'time-subtract rmi-org-gcal-up-days))
+(defun org-gcal--subtract-time ()
+  (org-gcal--adjust-date 'time-subtract org-gcal-up-days))
 
-(defun rmi-org-gcal--time-zone (seconds)
+(defun org-gcal--time-zone (seconds)
   (current-time-zone (seconds-to-time seconds)))
 
-(defun rmi-org-gcal--format-iso2org (str &optional tz)
-  (let* ((plst (rmi-org-gcal--parse-date str))
-         (seconds (rmi-org-gcal--time-to-seconds plst)))
+(defun org-gcal--format-iso2org (str &optional tz)
+  (let* ((plst (org-gcal--parse-date str))
+         (seconds (org-gcal--time-to-seconds plst)))
     (concat
      "<"
      (format-time-string
       (if (< 11 (length str)) "%Y-%m-%d %a %H:%M" "%Y-%m-%d %a")
       (seconds-to-time
-       (+ (if tz (car (rmi-org-gcal--time-zone seconds)) 0)
+       (+ (if tz (car (org-gcal--time-zone seconds)) 0)
           seconds)))
      ;;(if (and repeat (not (string= repeat ""))) (concat " " repeat) "")
      ">")))
 
-(defun rmi-org-gcal--format-org2iso (year mon day &optional hour min tz)
+(defun org-gcal--format-org2iso (year mon day &optional hour min tz)
   (let ((seconds (time-to-seconds (encode-time 0
                                                (or min 0)
                                                (or hour 0)
@@ -636,27 +636,27 @@ TO.  Instead an empty string is returned."
      (seconds-to-time
       (-
        seconds
-       (if tz (car (rmi-org-gcal--time-zone seconds)) 0))))))
+       (if tz (car (org-gcal--time-zone seconds)) 0))))))
 
-(defun rmi-org-gcal--iso-next-day (str &optional previous-p)
+(defun org-gcal--iso-next-day (str &optional previous-p)
   (let ((format (if (< 11 (length str))
                     "%Y-%m-%dT%H:%M"
                   "%Y-%m-%d"))
-        (plst (rmi-org-gcal--parse-date str))
+        (plst (org-gcal--parse-date str))
         (prev (if previous-p -1 +1)))
     (format-time-string format
                         (seconds-to-time
-                         (+ (rmi-org-gcal--time-to-seconds plst)
+                         (+ (org-gcal--time-to-seconds plst)
                             (* 60 60 24 prev))))))
 
-(defun rmi-org-gcal--iso-previous-day (str)
-  (rmi-org-gcal--iso-next-day str t))
+(defun org-gcal--iso-previous-day (str)
+  (org-gcal--iso-next-day str t))
 
-(defun rmi-org-gcal--update-entry (calendar-id event)
+(defun org-gcal--update-entry (calendar-id event)
   "\
 Update the entry at the current heading with information from EVENT, which is
 parsed from the Calendar API JSON response using
-‘rmi-org-gcal--json-read’. Point must be located on an Org-mode heading line or
+‘org-gcal--json-read’. Point must be located on an Org-mode heading line or
 an error will be thrown. Point is not preserved."
   (unless (org-at-heading-p)
     (user-error "Must be on Org-mode heading."))
@@ -680,7 +680,7 @@ an error will be thrown. Point is not preserved."
          (end   (if etime etime eday)))
     (when loc (replace-regexp-in-string "\n" ", " loc))
     (org-edit-headline smry)
-    (org-entry-put (point) rmi-org-gcal-etag-property etag)
+    (org-entry-put (point) org-gcal-etag-property etag)
     (when loc (org-entry-put (point) "LOCATION" loc))
     (when meet
       (org-entry-put
@@ -689,7 +689,7 @@ an error will be thrown. Point is not preserved."
        (format "[[%s][%s]]"
                meet
                "Join Hangouts Meet")))
-    (org-entry-put (point) rmi-org-gcal-calendar-id-property calendar-id)
+    (org-entry-put (point) org-gcal-calendar-id-property calendar-id)
     (org-entry-put (point) "ID" id)
     ;; Insert event time and description in :ORG-GCAL: drawer, erasing the
     ;; current contents.
@@ -698,7 +698,7 @@ an error will be thrown. Point is not preserved."
       (when (re-search-forward
              (format
               "^[ \t]*:%s:[^z-a]*?\n[ \t]*:END:[ \t]*\n?"
-              (regexp-quote rmi-org-gcal-drawer-name))
+              (regexp-quote org-gcal-drawer-name))
              (save-excursion (outline-next-heading) (point))
              'noerror)
         (replace-match "" 'fixedcase)))
@@ -706,61 +706,61 @@ an error will be thrown. Point is not preserved."
                        (save-excursion (outline-next-heading) (point)))
     (end-of-line)
     (newline)
-    (insert (format ":%s:" rmi-org-gcal-drawer-name))
+    (insert (format ":%s:" org-gcal-drawer-name))
     (newline)
-    (if (or (string= start end) (rmi-org-gcal--alldayp start end))
-        (insert (rmi-org-gcal--format-iso2org start))
+    (if (or (string= start end) (org-gcal--alldayp start end))
+        (insert (org-gcal--format-iso2org start))
       (if (and
-           (= (plist-get (rmi-org-gcal--parse-date start) :year)
-              (plist-get (rmi-org-gcal--parse-date end)   :year))
-           (= (plist-get (rmi-org-gcal--parse-date start) :mon)
-              (plist-get (rmi-org-gcal--parse-date end)   :mon))
-           (= (plist-get (rmi-org-gcal--parse-date start) :day)
-              (plist-get (rmi-org-gcal--parse-date end)   :day)))
+           (= (plist-get (org-gcal--parse-date start) :year)
+              (plist-get (org-gcal--parse-date end)   :year))
+           (= (plist-get (org-gcal--parse-date start) :mon)
+              (plist-get (org-gcal--parse-date end)   :mon))
+           (= (plist-get (org-gcal--parse-date start) :day)
+              (plist-get (org-gcal--parse-date end)   :day)))
           (insert "<"
-                  (rmi-org-gcal--format-date start "%Y-%m-%d %a %H:%M")
+                  (org-gcal--format-date start "%Y-%m-%d %a %H:%M")
                   "-"
-                  (rmi-org-gcal--format-date end "%H:%M")
+                  (org-gcal--format-date end "%H:%M")
                   ">")
-        (insert (rmi-org-gcal--format-iso2org start)
+        (insert (org-gcal--format-iso2org start)
                 "--"
-                (rmi-org-gcal--format-iso2org
+                (org-gcal--format-iso2org
                  (if (< 11 (length end))
                      end
-                   (rmi-org-gcal--iso-previous-day end))))))
+                   (org-gcal--iso-previous-day end))))))
     (newline)
     ;; Insert event description if present.
     (when desc
       (newline)
       (insert (replace-regexp-in-string "^\*" "✱" desc))
-      (insert (if (string= "\n" (rmi-org-gcal--safe-substring desc -1)) "" "\n")))
+      (insert (if (string= "\n" (org-gcal--safe-substring desc -1)) "" "\n")))
     (insert ":END:")))
 
-(defun rmi-org-gcal--format-date (str format &optional tz)
-  (let* ((plst (rmi-org-gcal--parse-date str))
-         (seconds (rmi-org-gcal--time-to-seconds plst)))
+(defun org-gcal--format-date (str format &optional tz)
+  (let* ((plst (org-gcal--parse-date str))
+         (seconds (org-gcal--time-to-seconds plst)))
     (concat
      (format-time-string format
                          (seconds-to-time
-                          (+ (if tz (car (rmi-org-gcal--time-zone seconds)) 0)
+                          (+ (if tz (car (org-gcal--time-zone seconds)) 0)
                              seconds))))))
 
-(defun rmi-org-gcal--param-date (str)
+(defun org-gcal--param-date (str)
   (if (< 11 (length str)) "dateTime" "date"))
 
-(defun rmi-org-gcal--param-date-alt (str)
+(defun org-gcal--param-date-alt (str)
   (if (< 11 (length str)) "date" "dateTime"))
 
-(defun rmi-org-gcal--get-calendar-id-of-buffer ()
+(defun org-gcal--get-calendar-id-of-buffer ()
   "Find calendar id of current buffer."
-  (or (cl-loop for (id . file) in rmi-org-gcal-fetch-file-alist
+  (or (cl-loop for (id . file) in org-gcal-fetch-file-alist
                if (file-equal-p file (buffer-file-name (buffer-base-buffer)))
                return id)
       (user-error (concat "Buffer `%s' may not related to google calendar; "
-                          "please check/configure `rmi-org-gcal-fetch-file-alist'")
+                          "please check/configure `org-gcal-fetch-file-alist'")
                   (buffer-name))))
 
-(defun rmi-org-gcal--get-event (calendar-id event-id &optional a-token)
+(defun org-gcal--get-event (calendar-id event-id &optional a-token)
   "\
 Retrieves a Google Calendar event given a CALENDAR-ID and EVENT-ID. If the
 access token A-TOKEN is not specified, it is loaded from the token file.
@@ -769,18 +769,18 @@ Returns a ‘deferred’ function that on success returns a ‘request-response�
 object."
   (let ((a-token (if a-token
                      a-token
-                   (rmi-org-gcal--get-access-token))))
+                   (org-gcal--get-access-token))))
     (deferred:$
       (request-deferred
        (concat
-        (format rmi-org-gcal-events-url calendar-id)
+        (format org-gcal-events-url calendar-id)
         (concat "/" event-id))
        :type "GET"
        :headers '(("Content-Type" . "application/json"))
        :params `(("access_token" . ,a-token)
-                 ("key" . ,rmi-org-gcal-client-secret)
+                 ("key" . ,org-gcal-client-secret)
                  ("grant_type" . "authorization_code"))
-       :parser 'rmi-org-gcal--json-read)
+       :parser 'org-gcal--json-read)
       (deferred:nextc it
         (lambda (response)
           (let
@@ -792,29 +792,29 @@ object."
              ;; include a status code.
              ((eq status nil)
               (set-marker marker nil)
-              (rmi-org-gcal--notify
+              (org-gcal--notify
                "Got Error"
                "Could not contact remote service. Please check your network connectivity."))
              ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
                           status))
-              (rmi-org-gcal--notify
+              (org-gcal--notify
                "Received HTTP 401"
                "OAuth token expired. Now trying to refresh-token")
               (deferred:next
                 (lambda ()
-                  (rmi-org-gcal-refresh-token 'rmi-org-gcal--get-event
+                  (org-gcal-refresh-token 'org-gcal--get-event
                                               nil nil nil nil nil nil nil calendar-id nil event-id))))
              ;; Generic error-handler meant to provide useful information about
              ;; failure cases not otherwise explicitly specified.
              ((not (eq error-msg nil))
               (set-marker marker nil)
-              (rmi-org-gcal--notify
+              (org-gcal--notify
                (concat "Status code: " (number-to-string status))
                (pp-to-string error-msg)))
              ;; Fetch was successful.
              (t response))))))))
 
-(defun rmi-org-gcal--post-event (start end smry loc desc calendar-id marker &optional etag event-id a-token skip-import skip-export)
+(defun org-gcal--post-event (start end smry loc desc calendar-id marker &optional etag event-id a-token skip-import skip-export)
   "\
 Creates or updates an event on Calendar CALENDAR-ID with attributes START, END,
 SMRY, LOC, DESC. The Org buffer and point from which the event is read is given
@@ -825,17 +825,17 @@ overwrite the event at MARKER if the event has changed on the server. MARKER is
 freed by this function.
 
 Returns a ‘deferred’ object that can be used to wait for completion."
-  (let ((stime (rmi-org-gcal--param-date start))
-        (etime (rmi-org-gcal--param-date end))
-        (stime-alt (rmi-org-gcal--param-date-alt start))
-        (etime-alt (rmi-org-gcal--param-date-alt end))
+  (let ((stime (org-gcal--param-date start))
+        (etime (org-gcal--param-date end))
+        (stime-alt (org-gcal--param-date-alt start))
+        (etime-alt (org-gcal--param-date-alt end))
         (a-token (if a-token
                      a-token
-                   (rmi-org-gcal--get-access-token))))
+                   (org-gcal--get-access-token))))
     (deferred:$
       (request-deferred
        (concat
-        (format rmi-org-gcal-events-url calendar-id)
+        (format org-gcal-events-url calendar-id)
         (when event-id
           (concat "/" event-id)))
        :type (if event-id "PATCH" "POST")
@@ -846,17 +846,17 @@ Returns a ‘deferred’ object that can be used to wait for completion."
        :data (encode-coding-string
               (json-encode `(("start" (,stime . ,start) (,stime-alt . nil))
                              ("end" (,etime . ,(if (equal "date" etime)
-                                                   (rmi-org-gcal--iso-next-day end)
+                                                   (org-gcal--iso-next-day end)
                                                  end)) (,etime-alt . nil))
                              ("summary" . ,smry)
                              ("location" . ,loc)
                              ("description" . ,desc)))
               'utf-8)
        :params `(("access_token" . ,a-token)
-                 ("key" . ,rmi-org-gcal-client-secret)
+                 ("key" . ,org-gcal-client-secret)
                  ("grant_type" . "authorization_code"))
 
-       :parser 'rmi-org-gcal--json-read)
+       :parser 'org-gcal--json-read)
       (deferred:nextc it
         (lambda (response)
           (let
@@ -868,41 +868,41 @@ Returns a ‘deferred’ object that can be used to wait for completion."
              ;; include a status code.
              ((eq status nil)
               (set-marker marker nil)
-              (rmi-org-gcal--notify
+              (org-gcal--notify
                "Got Error"
                "Could not contact remote service. Please check your network connectivity."))
              ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
                           status))
-              (rmi-org-gcal--notify
+              (org-gcal--notify
                "Received HTTP 401"
                "OAuth token expired. Now trying to refresh-token")
               (deferred:next
                 (lambda ()
-                  (rmi-org-gcal-refresh-token 'rmi-org-gcal--post-event
+                  (org-gcal-refresh-token 'org-gcal--post-event
                                               skip-export start end smry loc desc marker calendar-id etag event-id))))
              ;; ETag on current entry is stale. This means the event on the
              ;; server has been updated. In that case, update the event using
              ;; the data from the server.
              ((eq status 412)
-              (rmi-org-gcal--notify
+              (org-gcal--notify
                "Received HTTP 412"
                "ETag stale - will overwrite this entry with event from server.")
               (deferred:$
-                (rmi-org-gcal--get-event calendar-id event-id a-token)
+                (org-gcal--get-event calendar-id event-id a-token)
                 (deferred:nextc it
                   (lambda (response)
                     (save-excursion
                       (with-current-buffer (marker-buffer marker)
                         (goto-char (marker-position marker))
                         (set-marker marker nil)
-                        (rmi-org-gcal--update-entry
+                        (org-gcal--update-entry
                          calendar-id
                          (request-response-data response))))))))
              ;; Generic error-handler meant to provide useful information about
              ;; failure cases not otherwise explicitly specified.
              ((not (eq error-msg nil))
               (set-marker marker nil)
-              (rmi-org-gcal--notify
+              (org-gcal--notify
                (concat "Status code: " (number-to-string status))
                (pp-to-string error-msg)))
              ;; Fetch was successful.
@@ -913,13 +913,13 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                     (goto-char (marker-position marker))
                     (set-marker marker nil)
                     (org-set-property
-                     rmi-org-gcal-etag-property
+                     org-gcal-etag-property
                      (plist-get data :etag))))
-                (rmi-org-gcal--notify "Event Posted"
+                (org-gcal--notify "Event Posted"
                                       (concat "Org-gcal post event\n  " (plist-get data :summary))))))))))))
 
 
-(defun rmi-org-gcal--delete-event (calendar-id event-id etag marker &optional a-token)
+(defun org-gcal--delete-event (calendar-id event-id etag marker &optional a-token)
   "\
 Deletes an event on Calendar CALENDAR-ID with EVENT-ID. The Org buffer and
 point from which the event is read is given by MARKER.
@@ -931,11 +931,11 @@ freed by this function.
 Returns a ‘deferred’ object that can be used to wait for completion."
   (let ((a-token (if a-token
                      a-token
-                   (rmi-org-gcal--get-access-token))))
+                   (org-gcal--get-access-token))))
     (deferred:$
       (request-deferred
        (concat
-        (format rmi-org-gcal-events-url calendar-id)
+        (format org-gcal-events-url calendar-id)
         (concat "/" event-id))
        :type "DELETE"
        :headers (append
@@ -943,10 +943,10 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                  (if (null etag) nil
                    `(("If-Match" . ,etag))))
        :params `(("access_token" . ,a-token)
-                 ("key" . ,rmi-org-gcal-client-secret)
+                 ("key" . ,org-gcal-client-secret)
                  ("grant_type" . "authorization_code"))
 
-       :parser 'rmi-org-gcal--json-read)
+       :parser 'org-gcal--json-read)
       (deferred:nextc it
         (lambda (response)
           (let
@@ -958,68 +958,68 @@ Returns a ‘deferred’ object that can be used to wait for completion."
              ;; include a status code.
              ((eq status nil)
               (set-marker marker nil)
-              (rmi-org-gcal--notify
+              (org-gcal--notify
                "Got Error"
                "Could not contact remote service. Please check your network connectivity."))
              ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
                           status))
-              (rmi-org-gcal--notify
+              (org-gcal--notify
                "Received HTTP 401"
                "OAuth token expired. Now trying to refresh-token")
               (deferred:next
                 (lambda ()
-                  (rmi-org-gcal-refresh-token 'rmi-org-gcal--delete-event
+                  (org-gcal-refresh-token 'org-gcal--delete-event
                                               nil nil nil nil nil nil marker calendar-id etag event-id))))
              ;; ETag on current entry is stale. This means the event on the
              ;; server has been updated. In that case, update the event using
              ;; the data from the server.
              ((eq status 412)
-              (rmi-org-gcal--notify
+              (org-gcal--notify
                "Received HTTP 412"
                "ETag stale - will overwrite this entry with event from server.")
               (deferred:$
-                (rmi-org-gcal--get-event calendar-id event-id a-token)
+                (org-gcal--get-event calendar-id event-id a-token)
                 (deferred:nextc it
                   (lambda (response)
                     (save-excursion
                       (with-current-buffer (marker-buffer marker)
                         (goto-char (marker-position marker))
                         (set-marker marker nil)
-                        (rmi-org-gcal--update-entry
+                        (org-gcal--update-entry
                          calendar-id
                          (request-response-data response))))))))
              ;; Generic error-handler meant to provide useful information about
              ;; failure cases not otherwise explicitly specified.
              ((not (eq error-msg nil))
               (set-marker marker nil)
-              (rmi-org-gcal--notify
+              (org-gcal--notify
                (concat "Status code: " (number-to-string status))
                (pp-to-string error-msg)))
              ;; Fetch was successful.
              (t
               (set-marker marker nil)
-              (rmi-org-gcal--notify "Event Deleted" "Org-gcal deleted event")))))))))
+              (org-gcal--notify "Event Deleted" "Org-gcal deleted event")))))))))
 
-(defun rmi-org-gcal--capture-post ()
-  (dolist (i rmi-org-gcal-fetch-file-alist)
+(defun org-gcal--capture-post ()
+  (dolist (i org-gcal-fetch-file-alist)
     (when (string=  (file-name-nondirectory (cdr i))
                     (substring (buffer-name) 8))
-      (rmi-org-gcal-post-at-point))))
+      (org-gcal-post-at-point))))
 
-(add-hook 'org-capture-before-finalize-hook 'rmi-org-gcal--capture-post)
+(add-hook 'org-capture-before-finalize-hook 'org-gcal--capture-post)
 
-(defun rmi-org-gcal--ensure-token ()
+(defun org-gcal--ensure-token ()
   (cond
-   (rmi-org-gcal-token-plist t)
-   ((and (file-exists-p rmi-org-gcal-token-file)
+   (org-gcal-token-plist t)
+   ((and (file-exists-p org-gcal-token-file)
          (ignore-errors
-           (setq rmi-org-gcal-token-plist
+           (setq org-gcal-token-plist
                  (with-temp-buffer
-                   (insert-file-contents rmi-org-gcal-token-file)
+                   (insert-file-contents org-gcal-token-file)
                    (plist-get (read (current-buffer)) :token))))) t)
-   (t (rmi-org-gcal-request-token))))
+   (t (org-gcal-request-token))))
 
-(defun rmi-org-gcal--timestamp-successor ()
+(defun org-gcal--timestamp-successor ()
   "Search for the next timestamp object.
 Return value is a cons cell whose CAR is `timestamp' and CDR is
 beginning position."
@@ -1033,14 +1033,14 @@ beginning position."
            nil t)
       (cons 'timestamp (match-beginning 0)))))
 
-(defun rmi-org-gcal--notify (title message)
+(defun org-gcal--notify (title message)
   "Send alert with TITLE and MESSAGE."
-  (when rmi-org-gcal-notify-p
-    (if rmi-org-gcal-logo-file
-        (alert message :title title :icon rmi-org-gcal-logo-file)
+  (when org-gcal-notify-p
+    (if org-gcal-logo-file
+        (alert message :title title :icon org-gcal-logo-file)
       (alert message :title title))))
 
-(defun rmi-org-gcal--time-to-seconds (plst)
+(defun org-gcal--time-to-seconds (plst)
   (time-to-seconds
    (encode-time
     (plist-get plst :sec)
@@ -1051,6 +1051,6 @@ beginning position."
     (plist-get plst :year))))
 
 
-(provide 'rmi-org-gcal)
+(provide 'org-gcal)
 
-;;; rmi-org-gcal.el ends here
+;;; org-gcal.el ends here
