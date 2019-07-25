@@ -705,16 +705,14 @@ an error will be thrown. Point is not preserved."
     ;; Insert event time and description in :ORG-GCAL: drawer, erasing the
     ;; current contents.
     (org-back-to-heading)
-    (when (re-search-forward
-           (format
-            "^[ \t]*:%s:[^z-a]*?\n[ \t]*:END:[ \t]*\n?"
-            (regexp-quote rmi-org-gcal-drawer-name))
-           (save-excursion (outline-next-heading) (point))
-           'noerror)
-      (replace-match "" 'fixedcase)
-      ;; Go up to ensure we remain in the same entry.
-      (forward-line -1))
-    (org-back-to-heading)
+    (save-excursion
+      (when (re-search-forward
+             (format
+              "^[ \t]*:%s:[^z-a]*?\n[ \t]*:END:[ \t]*\n?"
+              (regexp-quote rmi-org-gcal-drawer-name))
+             (save-excursion (outline-next-heading) (point))
+             'noerror)
+        (replace-match "" 'fixedcase)))
     (re-search-forward ":PROPERTIES:[^z-a]*?:END:"
                        (save-excursion (outline-next-heading) (point)))
     (end-of-line)
