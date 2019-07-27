@@ -764,8 +764,11 @@ an error will be thrown. Point is not preserved."
              (save-excursion (outline-next-heading) (point))
              'noerror)
         (replace-match "" 'fixedcase)))
-    (re-search-forward ":PROPERTIES:[^z-a]*?:END:"
-                       (save-excursion (outline-next-heading) (point)))
+    (unless (re-search-forward ":PROPERTIES:[^z-a]*?:END:"
+                       (save-excursion (outline-next-heading) (point))
+                       'noerror)
+        (message "PROPERTIES not found: %s (%s) %d"
+                 (buffer-name) (buffer-file-name) (point)))
     (end-of-line)
     (newline)
     (insert (format ":%s:" org-gcal-drawer-name))
