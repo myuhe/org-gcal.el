@@ -469,23 +469,41 @@ It returns the code provided by the service."
 
 (defun org-gcal-request-token ()
   "Refresh OAuth access at TOKEN-URL."
-  (request
-   org-gcal-token-url
-   :type "POST"
-   :data `(("client_id" . ,org-gcal-client-id)
-           ("client_secret" . ,org-gcal-client-secret)
-           ("code" . ,(org-gcal-request-authorization))
-           ("redirect_uri" .  "urn:ietf:wg:oauth:2.0:oob")
-           ("grant_type" . "authorization_code"))
-   :parser 'org-gcal--json-read
-   :success (cl-function
-             (lambda (&key data &allow-other-keys)
-               (when data
-                 (setq org-gcal-token-plist data)
-                 (org-gcal--save-sexp data org-gcal-token-file))))
-   :error
-   (cl-function (lambda (&key error-thrown &allow-other-keys)
-                  (message "Got error: %S" error-thrown)))))
+  (deferred:$
+    (request-deferred
+     org-gcal-token-url
+     :type "POST"
+     :data `(("client_id" . ,org-gcal-client-id)
+             ("client_secret" . ,org-gcal-client-secret)
+             ("code" . ,(org-gcal-request-authorization))
+             ("redirect_uri" .  "urn:ietf:wg:oauth:2.0:oob")
+             ("grant_type" . "authorization_code"))
+     :parser 'org-gcal--json-read)
+    (deferred:nextc it
+      (lambda (response)
+        (let
+            ((data (request-response-data response))
+             (status (request-response-status-code response))
+             (error-msg (request-response-error-thrown response)))
+          (cond
+           ;; If there is no network connectivity, the response will not
+           ;; include a status code.
+           ((eq status nil)
+            (set-marker marker nil)
+            (org-gcal--notify
+             "Got Error"
+             "Could not contact remote service. Please check your network connectivity."))
+           ;; Generic error-handler meant to provide useful information about
+           ;; failure cases not otherwise explicitly specified.
+           ((not (eq error-msg nil))
+            (org-gcal--notify
+             (concat "Status code: " (number-to-string status))
+             (pp-to-string error-msg)))
+           ;; Fetch was successful.
+           (t
+            (when data
+              (setq org-gcal-token-plist data)
+              (org-gcal--save-sexp data org-gcal-token-file)))))))))
 
 (defun org-gcal-refresh-token (&optional fun skip-import skip-export start end smry loc desc marker calendar-id etag event-id)
   "Refresh OAuth access and call FUN after that.
@@ -951,6 +969,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
              ;; failure cases not otherwise explicitly specified.
              ((not (eq error-msg nil))
               (set-marker marker nil)
+              (message "error-msg: %S" error-msg)
               (org-gcal--notify
                (concat "Status code: " (number-to-string status))
                (pp-to-string error-msg)))
@@ -962,11 +981,11 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                     (with-current-buffer (marker-buffer marker)
                       (goto-char (marker-position marker))
                       (set-marker marker nil)
-                      (org-set-property
-                       org-gcal-etag-property
-                       (plist-get data :etag))))
+                      ;; Update the entry to add ETag, as well as other
+                      ;; properties if this is a newly-created event.
+                      (org-gcal--update-entry calendar-id data)))
                   (org-gcal--notify "Event Posted"
-                                        (concat "Org-gcal post event\n  " (plist-get data :summary)))))))))))))
+                                    (concat "Org-gcal post event\n  " (plist-get data :summary)))))))))))))
 
 
 (defun org-gcal--delete-event (calendar-id event-id etag marker &optional a-token)
@@ -1067,7 +1086,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                  (with-temp-buffer
                    (insert-file-contents org-gcal-token-file)
                    (plist-get (read (current-buffer)) :token))))) t)
-   (t (org-gcal-request-token))))
+   (t (deferred:sync! (org-gcal-request-token)))))
 
 (defun org-gcal--timestamp-successor ()
   "Search for the next timestamp object.
