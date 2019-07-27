@@ -392,8 +392,6 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
                                  'noerror)
             (goto-char (match-beginning 0))
             (setq tobj (org-element-timestamp-parser))))
-        ;; Prefer to read event time from the SCHEDULED property if present.
-        (setq tobj (or (org-element-property :scheduled elem) tobj))
         ;; Lines after the timestamp contain the description. Skip leading
         ;; blank lines.
         (forward-line)
@@ -413,26 +411,26 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
                   (replace-regexp-in-string
                    " *:PROPERTIES:\n *\\(.*\\(?:\n.*\\)*?\\) *:END:\n+"
                    ""
-                   desc))))
-           start
-            (org-gcal--format-org2iso
-             (plist-get (cadr tobj) :year-start)
-             (plist-get (cadr tobj) :month-start)
-             (plist-get (cadr tobj) :day-start)
-             (plist-get (cadr tobj) :hour-start)
-             (plist-get (cadr tobj) :minute-start)
-             (when (plist-get (cadr tobj) :hour-start)
-               t))
-           end
-            (org-gcal--format-org2iso
-                 (plist-get (cadr tobj) :year-end)
-                 (plist-get (cadr tobj) :month-end)
-                 (plist-get (cadr tobj) :day-end)
-                 (plist-get (cadr tobj) :hour-end)
-                 (plist-get (cadr tobj) :minute-end)
-                 (when (plist-get (cadr tobj) :hour-start)
-                   t
-                   ""))))
+                   desc))))))
+      ;; Prefer to read event time from the SCHEDULED property if present.
+      (setq tobj (or (org-element-property :scheduled elem) tobj))
+      (setq
+       start
+       (org-gcal--format-org2iso
+        (plist-get (cadr tobj) :year-start)
+        (plist-get (cadr tobj) :month-start)
+        (plist-get (cadr tobj) :day-start)
+        (plist-get (cadr tobj) :hour-start)
+        (plist-get (cadr tobj) :minute-start)
+        (when (plist-get (cadr tobj) :hour-start) t))
+       end
+       (org-gcal--format-org2iso
+        (plist-get (cadr tobj) :year-end)
+        (plist-get (cadr tobj) :month-end)
+        (plist-get (cadr tobj) :day-end)
+        (plist-get (cadr tobj) :hour-end)
+        (plist-get (cadr tobj) :minute-end)
+        (when (plist-get (cadr tobj) :hour-start) t)))
       (org-gcal--post-event start end smry loc desc calendar-id marker etag id nil skip-import skip-export))))
 
 ;;;###autoload
