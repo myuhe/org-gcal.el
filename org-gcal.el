@@ -39,6 +39,7 @@
 (require 'org-element)
 (require 'org-archive)
 (require 'cl-lib)
+(require 'rx)
 
 ;; Customization
 ;;; Code:
@@ -231,7 +232,11 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                          (let ((items (org-gcal--filter (plist-get (request-response-data response) :items))))
                            (mapcar
                             (lambda (event)
-                              (let ((marker (org-id-find (plist-get event :id) 'markerp)))
+                              (let ((marker (org-id-find
+                                             (org-gcal--format-entry-id
+                                              (car x)
+                                              (plist-get event :id))
+                                             'markerp)))
                                 (if marker
                                     ;; If the ID has been retrieved already,
                                     ;; find the event and update it. This will
@@ -247,8 +252,7 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                                         ;; the current point.
                                         (if skip-export
                                             (org-gcal--update-entry (car x) event)
-                                          (org-gcal-post-at-point 'skip-import skip-export)))
-                                      (set-marker marker nil))
+                                          (org-gcal-post-at-point 'skip-import skip-export))))
                                   ;; Otherwise, insert a new entry into the
                                   ;; default fetch file.
                                   (insert "\n* ")
@@ -316,29 +320,79 @@ filter returns NIL, discard the item."
        items)
     items))
 
-(defun org-gcal--headline-list (file)
-  "Return positions for all headlines of FILE."
-  (let ((buf (find-file-noselect file)))
-    (with-current-buffer buf
-      (org-element-map (org-element-parse-buffer) 'headline
-        (lambda (hl) (org-element-property :begin hl))))))
+(defun org-gcal--all-property-local-values (pom property literal-nil)
+  "Return all values for PROPERTY in entry at point or marker POM.
+Works like ‘org--property-local-values’, except that if multiple values of a
+property whose key doesn’t contain a ‘+’ sign are present, this function will
+return all of them. In particular, we wish to retrieve all local values of the
+\"ID\" property. LITERAL-NIL also works the same way.
 
-(defun org-gcal--parse-id (file)
-  "Return a list of conses (ID . entry) of file FILE."
-  (let ((buf (find-file-noselect file)))
-    (with-current-buffer buf
-      (save-excursion
-        (cl-loop for pos in (org-element-map (org-element-parse-buffer) 'headline
-                              (lambda (hl) (org-element-property :begin hl)))
-                 do (goto-char pos)
-                 collect (cons (org-element-map (org-element-at-point) 'headline
-                                 (lambda (hl)
-                                   (org-element-property :ID hl)))
-                               (buffer-substring-no-properties
-                                pos
-                                (car
-                                 (org-element-map (org-element-at-point) 'headline
-                                   (lambda (hl) (org-element-property :end hl)))))))))))
+Does not preserve point."
+  (org-with-point-at pom
+    (org-back-to-heading)
+    (let ((range (org-get-property-block)))
+      (when range
+        (goto-char (car range))
+        (let* ((case-fold-search t)
+               (end (cdr range))
+               value)
+          ;; Find values.
+          (let* ((property+ (org-re-property
+                             (concat (regexp-quote property) "\\+?") t t)))
+            (while (re-search-forward property+ end t)
+              (let ((v (match-string-no-properties 3)))
+                (push (if literal-nil v (org-not-nil v)) value))))
+          ;; Return final values.
+          (and (not (equal value '(nil))) (nreverse value)))))))
+
+(defun org-gcal--put-id (pom calendar-id event-id)
+  "\
+Store a canonical ID generated from CALENDAR-ID and EVENT-ID in the \":ID:\"
+property at point-or-marker POM.
+The existing \":ID\" entries at POM, if any, will be inserted after the
+canonical ID, so that existing links won’t be broken."
+  (org-with-point-at pom
+    (org-back-to-heading)
+    (let ((ids (org-gcal--all-property-local-values (point) "ID" nil))
+          (entry-id (org-gcal--format-entry-id calendar-id event-id)))
+      ;; First delete all existing IDs and insert canonical ID. This will put
+      ;; it as the first ID in the entry.
+      (org-entry-delete (point) "ID")
+      (org-entry-put (point) "ID" entry-id)
+      ;; Now find the ID just inserted and insert the other IDs in their
+      ;; original order.
+      (let* ((range (org-get-property-block)))
+        (goto-char (car range))
+        (re-search-forward
+         (org-re-property "ID" nil t) (cdr range) t)
+        ;; See ‘org-re-property’ - match 5 is the end of the line.
+        (goto-char (match-end 5))
+        (let ((indentation (match-string-no-properties 4)))
+          (mapc
+           (lambda (id)
+             (newline)
+             (insert indentation ":ID: " id))
+           (remove-if (lambda (x) (string= x entry-id)) ids)))))))
+
+(defun org-gcal--event-id-from-entry-id (entry-id)
+  "Parse an ENTRY-ID created by ‘org-gcal--format-entry-id’ and return EVENT-ID."
+  (when
+      (and entry-id
+           (string-match
+            (rx-to-string
+             '(and
+               string-start
+               (submatch-n 1
+                           (1+ (not (any ?/ ?\n))))
+               (? ?/
+                  (submatch-n 2 (1+ (not (any ?/ ?\n)))))
+               string-end))
+            entry-id))
+    (match-string 1 entry-id)))
+
+(defun org-gcal--format-entry-id (calendar-id event-id)
+  "Format CALENDAR-ID and ENTRY-ID into a canonical ID for an Org mode entry."
+  (format "%s/%s" event-id calendar-id))
 
 (defun org-gcal--property-from-name (name)
   "\
@@ -367,7 +421,8 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
            (elem (org-element-headline-parser (point-max) t))
            (smry (org-element-property :title elem))
            (loc (org-element-property :LOCATION elem))
-           (id (org-element-property :ID elem))
+           (event-id (org-gcal--event-id-from-entry-id
+                      (org-element-property :ID elem)))
            (etag (org-element-property
                   (org-gcal--property-from-name org-gcal-etag-property)
                   elem))
@@ -431,7 +486,8 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
         (plist-get (cadr tobj) :hour-end)
         (plist-get (cadr tobj) :minute-end)
         (when (plist-get (cadr tobj) :hour-start) t)))
-      (org-gcal--post-event start end smry loc desc calendar-id marker etag id nil skip-import skip-export))))
+      (org-gcal--post-event start end smry loc desc calendar-id marker etag
+                            event-id nil skip-import skip-export))))
 
 ;;;###autoload
 (defun org-gcal-delete-at-point ()
@@ -451,7 +507,8 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
            (etag (org-element-property
                   (org-gcal--property-from-name org-gcal-etag-property)
                   elem))
-           (event-id (org-element-property :ID elem)))
+           (event-id (org-gcal--event-id-from-entry-id
+                      (org-element-property :ID elem))))
       (when (and event-id
                  (y-or-n-p (format "Do you really want to delete event?\n\n%s\n\n" smry)))
         (org-gcal--delete-event calendar-id event-id etag marker)))))
@@ -727,7 +784,7 @@ an error will be thrown. Point is not preserved."
          (link  (plist-get event :htmlLink))
          (meet  (plist-get event :hangoutLink))
          (etag (plist-get event :etag))
-         (id    (plist-get event :id))
+         (event-id    (plist-get event :id))
          (stime (plist-get (plist-get event :start)
                            :dateTime))
          (etime (plist-get (plist-get event :end)
@@ -751,7 +808,7 @@ an error will be thrown. Point is not preserved."
                meet
                "Join Hangouts Meet")))
     (org-entry-put (point) org-gcal-calendar-id-property calendar-id)
-    (org-entry-put (point) "ID" id)
+    (org-gcal--put-id (point) calendar-id event-id)
     ;; Insert event time and description in :ORG-GCAL: drawer, erasing the
     ;; current contents.
     (org-back-to-heading)
