@@ -413,6 +413,11 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
   (interactive)
   (org-gcal--ensure-token)
   (save-excursion
+    ;; Post entry at point in org-agenda buffer.
+    (when (eq major-mode 'org-agenda-mode)
+      (let ((m (org-get-at-bol 'org-hd-marker)))
+        (set-buffer (marker-buffer m))
+        (goto-char (marker-position m))))
     (end-of-line)
     (org-back-to-heading)
     (let* ((skip-import skip-import)
@@ -495,6 +500,11 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
   (interactive)
   (org-gcal--ensure-token)
   (save-excursion
+    ;; Delete entry at point in org-agenda buffer.
+    (when (eq major-mode 'org-agenda-mode)
+      (let ((m (org-get-at-bol 'org-hd-marker)))
+        (set-buffer (marker-buffer m))
+        (goto-char (marker-position m))))
     (end-of-line)
     (org-back-to-heading)
     (let* ((marker (point-marker))
