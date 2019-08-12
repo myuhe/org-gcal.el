@@ -242,17 +242,15 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                                     ;; find the event and update it. This will
                                     ;; update events that have been moved from
                                     ;; the default fetch file.
-                                    (save-excursion
-                                      (with-current-buffer (marker-buffer marker)
-                                        (goto-char (marker-position marker))
-                                        ;; If skipping exports, just overwrite
-                                        ;; current entry's calendar data with
-                                        ;; what's been retrieved from the
-                                        ;; server. Otherwise, sync the entry at
-                                        ;; the current point.
-                                        (if skip-export
-                                            (org-gcal--update-entry (car x) event)
-                                          (org-gcal-post-at-point 'skip-import skip-export))))
+                                    (org-with-point-at marker
+                                      ;; If skipping exports, just overwrite
+                                      ;; current entry's calendar data with
+                                      ;; what's been retrieved from the
+                                      ;; server. Otherwise, sync the entry at
+                                      ;; the current point.
+                                      (if skip-export
+                                          (org-gcal--update-entry (car x) event)
+                                        (org-gcal-post-at-point 'skip-import skip-export)))
                                   ;; Otherwise, insert a new entry into the
                                   ;; default fetch file.
                                   (insert "\n* ")
@@ -329,7 +327,7 @@ return all of them. In particular, we wish to retrieve all local values of the
 
 Does not preserve point."
   (org-with-point-at pom
-    (org-back-to-heading)
+    (org-gcal--back-to-heading)
     (let ((range (org-get-property-block)))
       (when range
         (goto-char (car range))
@@ -352,7 +350,7 @@ property at point-or-marker POM.
 The existing \":ID\" entries at POM, if any, will be inserted after the
 canonical ID, so that existing links won’t be broken."
   (org-with-point-at pom
-    (org-back-to-heading)
+    (org-gcal--back-to-heading)
     (let ((ids (org-gcal--all-property-local-values (point) "ID" nil))
           (entry-id (org-gcal--format-entry-id calendar-id event-id)))
       ;; First delete all existing IDs and insert canonical ID. This will put
@@ -400,6 +398,12 @@ Converts property names (as strings) to a symbol suitable for use as the
 PROPERTY argument to ‘org-element-property’."
   (intern (concat ":" (upcase name))))
 
+(defun org-gcal--back-to-heading ()
+  "\
+Call ‘org-back-to-heading’ with the invisible-ok argument set to true.
+We always intend to go back to the invisible heading here."
+  (org-back-to-heading 'invisible-ok))
+
 ;;;###autoload
 (defun org-gcal-post-at-point (&optional skip-import skip-export)
   "\
@@ -419,7 +423,7 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
         (set-buffer (marker-buffer m))
         (goto-char (marker-position m))))
     (end-of-line)
-    (org-back-to-heading)
+    (org-gcal--back-to-heading)
     (let* ((skip-import skip-import)
            (skip-export skip-export)
            (marker (point-marker))
@@ -506,7 +510,7 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
         (set-buffer (marker-buffer m))
         (goto-char (marker-position m))))
     (end-of-line)
-    (org-back-to-heading)
+    (org-gcal--back-to-heading)
     (let* ((marker (point-marker))
            (elem (org-element-headline-parser (point-max) t))
            (smry (org-element-property :title elem))
@@ -821,7 +825,7 @@ an error will be thrown. Point is not preserved."
     (org-gcal--put-id (point) calendar-id event-id)
     ;; Insert event time and description in :ORG-GCAL: drawer, erasing the
     ;; current contents.
-    (org-back-to-heading)
+    (org-gcal--back-to-heading)
     (setq elem (org-element-at-point))
     (save-excursion
       (when (re-search-forward
