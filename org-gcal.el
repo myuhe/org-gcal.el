@@ -675,8 +675,8 @@ needed. For handling of MARKER see docstring for the function referenced by FUN.
             (with-temp-buffer (insert-file-contents org-gcal-token-file)
                               (plist-get (plist-get (read (buffer-string)) :token) :refresh_token)))
         (org-gcal--notify
-         (concat org-gcal-token-file " is not exists")
-         (concat "Make" org-gcal-token-file))))))
+         (concat org-gcal-token-file " does not exist.")
+         (concat "Please create " org-gcal-token-file " before proceeding."))))))
 
 (defun org-gcal--get-access-token ()
   (if org-gcal-token-plist
