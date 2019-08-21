@@ -286,14 +286,28 @@ Set SILENT to non-nil to inhibit notifications."
   (org-gcal--ensure-token)
   (save-excursion
     (goto-char (point-min))
-    (while (re-search-forward
-            (format "^[ \t]*:%s:[ \t]*$" org-gcal-drawer-name)
-            (point-max)
-            'noerror)
-      (org-gcal-post-at-point 'skip-import skip-export)))
-  (unless silent
-    (org-gcal--notify "Completed syncing events in buffer."
-                          (concat "Events synced in\n" (buffer-file-name)))))
+    (let
+        ((markers
+          (cl-loop
+           while (re-search-forward
+                  (format "^[ \t]*:%s:[ \t]*$" org-gcal-drawer-name)
+                  (point-max)
+                  'noerror)
+           collect (point-marker))))
+      (deferred:$
+        (deferred:loop markers
+          (lambda (marker)
+            (org-with-point-at marker
+              (deferred:$
+                (org-gcal-post-at-point 'skip-import skip-export)
+                (deferred:error it
+                  (lambda (err)
+                    (message "org-gcal-sync-buffer: error: %s" err)))))))
+        (deferred:nextc it
+          (lambda (_)
+            (unless silent
+              (org-gcal--notify "Completed syncing events in buffer."
+                                (concat "Events synced in\n" (buffer-file-name))))))))))
 
 ;;;###autoload
 (defun org-gcal-fetch-buffer (&optional a-token skip-export silent)
