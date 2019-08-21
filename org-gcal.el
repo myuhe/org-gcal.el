@@ -193,38 +193,37 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                       ((eq status nil)
                        (org-gcal--notify
                         "Got Error"
-                        "Could not contact remote service. Please check your network connectivity."))
-                      ;; Receiving a 403 response could mean that the calendar
-                      ;; API has not been enabled. When the user goes and
-                      ;; enables it, a new token will need to be generated. This
-                      ;; takes care of that step.
+                        "Could not contact remote service. Please check your network connectivity.")
+                       (error "Got error %S: %S" status error-thrown))
                       ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
                                    status))
                        (org-gcal--notify
                         "Received HTTP 401"
                         "OAuth token expired. Now trying to refresh-token")
-                       (deferred:next
-                         (lambda()
-                           (org-gcal-refresh-token 'org-gcal-sync nil skip-export))))
+                       (deferred:$
+                         (org-gcal--refresh-token)
+                         (deferred:nextc it
+                           (lambda (a-token)
+                             (org-gcal-sync a-token skip-export silent)))))
                       ((eq 403 status)
                        (org-gcal--notify "Received HTTP 403"
-                                             "Ensure you enabled the Calendar API through the Developers Console, then try again.")
-                       (deferred:nextc it
-                         (lambda()
-                           (org-gcal-refresh-token 'org-gcal-sync nil skip-export))))
+                                         "Ensure you enabled the Calendar API through the Developers Console, then try again.")
+                       (error "Got error %S: %S" status error-thrown))
                       ;; We got some 2xx response, but for some reason no
                       ;; message body.
                       ((and (> 299 status) (eq temp nil))
                        (org-gcal--notify
                         (concat "Received HTTP" (number-to-string status))
-                        "Error occured, but no message body."))
+                        "Error occured, but no message body.")
+                       (error "Got error %S: %S" status error-thrown))
                       ((not (eq error-msg nil))
                        ;; Generic error-handler meant to provide useful
                        ;; information about failure cases not otherwise
                        ;; explicitly specified.
                        (org-gcal--notify
                         (concat "Status code: " (number-to-string status))
-                        (pp-to-string error-msg)))
+                        (pp-to-string error-msg))
+                       (error "Got error %S: %S" status error-thrown))
                       ;; Fetch was successful.
                       (t
                        (with-current-buffer (find-file-noselect (cdr x))
@@ -576,10 +575,8 @@ It returns the code provided by the service."
               (setq org-gcal-token-plist data)
               (org-gcal--save-sexp data org-gcal-token-file)))))))))
 
-(defun org-gcal-refresh-token (&optional fun skip-import skip-export start end smry loc desc marker calendar-id etag event-id)
-  "Refresh OAuth access and call FUN after that.
-Pass SKIP-IMPORT, SKIP-EXPORT, START, END, SMRY, LOC, DESC.  and EVENT-ID to FUN if
-needed. For handling of MARKER see docstring for the function referenced by FUN."
+(defun org-gcal--refresh-token ()
+  "Refresh OAuth access and return the new access token as a deferred object."
   (deferred:$
     (request-deferred
      org-gcal-token-url
@@ -588,31 +585,21 @@ needed. For handling of MARKER see docstring for the function referenced by FUN.
              ("client_secret" . ,org-gcal-client-secret)
              ("refresh_token" . ,(org-gcal--get-refresh-token))
              ("grant_type" . "refresh_token"))
-     :parser 'org-gcal--json-read
-     :error
-     (cl-function (lambda (&key error-thrown &allow-other-keys)
-                    (message "Got error: %S" error-thrown))))
+     :parser 'org-gcal--json-read)
     (deferred:nextc it
       (lambda (response)
-        (let ((temp (request-response-data response)))
-          (plist-put org-gcal-token-plist
-                     :access_token
-                     (plist-get temp :access_token))
-          (org-gcal--save-sexp org-gcal-token-plist org-gcal-token-file)
-          org-gcal-token-plist)))
-    (deferred:nextc it
-      (lambda (token)
-        (cond ((eq fun 'org-gcal-sync)
-               (org-gcal-sync (plist-get token :access_token) skip-export))
-              ((eq fun 'org-gcal--get-event)
-               (org-gcal--get-event
-                calendar-id event-id (plist-get token :access_token)))
-              ((eq fun 'org-gcal--post-event)
-               (org-gcal--post-event
-                start end smry loc desc calendar-id marker etag event-id (plist-get token :access_token)
-                skip-import skip-export))
-              ((eq fun 'org-gcal--delete-event)
-               (org-gcal--delete-event calendar-id event-id etag marker (plist-get token :access_token))))))))
+        (let ((data (request-response-data response))
+              (status-code (request-response-status-code response))
+              (error-thrown (request-response-error-thrown response)))
+          (cond
+           ((eq error-thrown nil)
+            (plist-put org-gcal-token-plist
+                       :access_token
+                       (plist-get data :access_token))
+            (org-gcal--save-sexp org-gcal-token-plist org-gcal-token-file)
+            (plist-get org-gcal-token-plist :access_token))
+           (t
+            (error "Got error %S: %S" status-code error-thrown))))))))
 
 ;; Internal
 (defun org-gcal--archive-old-event ()
@@ -938,11 +925,12 @@ object."
                           status))
               (org-gcal--notify
                "Received HTTP 401"
-               "OAuth token expired. Now trying to refresh-token")
-              (deferred:next
-                (lambda ()
-                  (org-gcal-refresh-token 'org-gcal--get-event
-                                          nil nil nil nil nil nil nil nil calendar-id nil event-id))))
+               "OAuth token expired. Now trying to refresh token.")
+              (deferred:$
+                (org-gcal--refresh-token)
+                (deferred:nextc it
+                  (lambda (a-token)
+                    (org-gcal--get-event calendar-id event-id a-token)))))
              ;; Generic error-handler meant to provide useful information about
              ;; failure cases not otherwise explicitly specified.
              ((not (eq error-msg nil))
@@ -1015,11 +1003,13 @@ Returns a ‘deferred’ object that can be used to wait for completion."
               (org-gcal--notify
                "Received HTTP 401"
                "OAuth token expired. Now trying to refresh-token")
-              (deferred:next
-                (lambda ()
-                  (org-gcal-refresh-token 'org-gcal--post-event
-                                          skip-import skip-export start end smry
-                                          loc desc marker calendar-id etag event-id))))
+              (deferred:$
+                (org-gcal--refresh-token)
+                (deferred:nextc it
+                  (lambda (a-token)
+                    (org-gcal--post-event start end smry loc desc calendar-id
+                                          marker etag event-id a-token
+                                          skip-import skip-export)))))
              ;; ETag on current entry is stale. This means the event on the
              ;; server has been updated. In that case, update the event using
              ;; the data from the server.
@@ -1109,10 +1099,12 @@ Returns a ‘deferred’ object that can be used to wait for completion."
               (org-gcal--notify
                "Received HTTP 401"
                "OAuth token expired. Now trying to refresh-token")
-              (deferred:next
-                (lambda ()
-                  (org-gcal-refresh-token 'org-gcal--delete-event
-                                          nil nil nil nil nil nil nil marker calendar-id etag event-id))))
+              (deferred:$
+                (org-gcal--refresh-token)
+                (deferred:nextc it
+                  (lambda (a-token)
+                    (org-gcal--delete-event calendar-id event-id
+                                            etag marker a-token)))))
              ;; ETag on current entry is stale. This means the event on the
              ;; server has been updated. In that case, update the event using
              ;; the data from the server.
