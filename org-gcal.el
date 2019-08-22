@@ -311,30 +311,31 @@ modified on the server will overwrite entries in the buffer.
 Set SILENT to non-nil to inhibit notifications."
   (interactive)
   (org-gcal--ensure-token)
-  (save-excursion
-    (goto-char (point-min))
-    (let
-        ((markers
+  (let*
+      ((file-name (buffer-file-name))
+       (markers
+        (save-excursion
+          (goto-char (point-min))
           (cl-loop
            while (re-search-forward
                   (format "^[ \t]*:%s:[ \t]*$" org-gcal-drawer-name)
                   (point-max)
                   'noerror)
-           collect (point-marker))))
-      (deferred:$
-        (deferred:loop markers
-          (lambda (marker)
-            (org-with-point-at marker
-              (deferred:$
-                (org-gcal-post-at-point 'skip-import skip-export)
-                (deferred:error it
-                  (lambda (err)
-                    (message "org-gcal-sync-buffer: error: %s" err)))))))
-        (deferred:nextc it
-          (lambda (_)
-            (unless silent
-              (org-gcal--notify "Completed syncing events in buffer."
-                                (concat "Events synced in\n" (buffer-file-name))))))))))
+           collect (point-marker)))))
+    (deferred:$
+      (deferred:loop markers
+        (lambda (marker)
+          (org-with-point-at marker
+            (deferred:$
+              (org-gcal-post-at-point 'skip-import skip-export)
+              (deferred:error it
+                (lambda (err)
+                  (message "org-gcal-sync-buffer: error: %s" err)))))))
+      (deferred:nextc it
+        (lambda (_)
+          (unless silent
+            (org-gcal--notify "Completed syncing events in buffer."
+                              (concat "Events synced in\n" file-name))))))))
 
 ;;;###autoload
 (defun org-gcal-fetch-buffer (&optional a-token skip-export silent)
