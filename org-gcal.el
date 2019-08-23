@@ -289,7 +289,8 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
             (lambda (_)
               (unless silent
                 (org-gcal--notify "Completed event fetching ."
-                                  (concat "Events fetched into\n" calendar-file))))))))))
+                                  (concat "Events fetched into\n" calendar-file)))
+              (deferred:succeed nil))))))))
 
 ;;;###autoload
 (defun org-gcal-fetch ()
@@ -333,7 +334,8 @@ Set SILENT to non-nil to inhibit notifications."
         (lambda (_)
           (unless silent
             (org-gcal--notify "Completed syncing events in buffer."
-                              (concat "Events synced in\n" file-name))))))))
+                              (concat "Events synced in\n" file-name)))
+          (deferred:succeed nil))))))
 
 ;;;###autoload
 (defun org-gcal-fetch-buffer (&optional a-token skip-export silent)
@@ -594,26 +596,28 @@ It returns the code provided by the service."
         (let
             ((data (request-response-data response))
              (status (request-response-status-code response))
-             (error-msg (request-response-error-thrown response)))
+             (error-thrown (request-response-error-thrown response)))
           (cond
            ;; If there is no network connectivity, the response will not
            ;; include a status code.
            ((eq status nil)
-            (set-marker marker nil)
             (org-gcal--notify
              "Got Error"
-             "Could not contact remote service. Please check your network connectivity."))
+             "Could not contact remote service. Please check your network connectivity.")
+            (error "Network connectivity issue" status-code error-thrown))
            ;; Generic error-handler meant to provide useful information about
            ;; failure cases not otherwise explicitly specified.
-           ((not (eq error-msg nil))
+           ((not (eq error-thrown nil))
             (org-gcal--notify
              (concat "Status code: " (number-to-string status))
-             (pp-to-string error-msg)))
+             (pp-to-string error-thrown))
+            (error "Got error %S: %S" status-code error-thrown))
            ;; Fetch was successful.
            (t
             (when data
               (setq org-gcal-token-plist data)
-              (org-gcal--save-sexp data org-gcal-token-file)))))))))
+              (org-gcal--save-sexp data org-gcal-token-file))
+            (deferred:succeed nil))))))))
 
 (defun org-gcal--refresh-token ()
   "Refresh OAuth access and return the new access token as a deferred object."
@@ -637,7 +641,8 @@ It returns the code provided by the service."
                        :access_token
                        (plist-get data :access_token))
             (org-gcal--save-sexp org-gcal-token-plist org-gcal-token-file)
-            (plist-get org-gcal-token-plist :access_token))
+            (plist-get org-gcal-token-plist :access_token)
+            (deferred:succeed nil))
            (t
             (error "Got error %S: %S" status-code error-thrown))))))))
 
@@ -950,19 +955,19 @@ object."
       (deferred:nextc it
         (lambda (response)
           (let
-              ((temp (request-response-data response))
-               (status (request-response-status-code response))
-               (error-msg (request-response-error-thrown response)))
+              ((data (request-response-data response))
+               (status-code (request-response-status-code response))
+               (error-thrown (request-response-error-thrown response)))
             (cond
              ;; If there is no network connectivity, the response will not
              ;; include a status code.
-             ((eq status nil)
-              (set-marker marker nil)
+             ((eq status-code nil)
               (org-gcal--notify
                "Got Error"
-               "Could not contact remote service. Please check your network connectivity."))
+               "Could not contact remote service. Please check your network connectivity.")
+              (error "Network connectivity issue"))
              ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
-                          status))
+                          status-code))
               (org-gcal--notify
                "Received HTTP 401"
                "OAuth token expired. Now trying to refresh token.")
@@ -973,11 +978,11 @@ object."
                     (org-gcal--get-event calendar-id event-id a-token)))))
              ;; Generic error-handler meant to provide useful information about
              ;; failure cases not otherwise explicitly specified.
-             ((not (eq error-msg nil))
-              (set-marker marker nil)
+             ((not (eq error-thrown nil))
               (org-gcal--notify
-               (concat "Status code: " (number-to-string status))
-               (pp-to-string error-msg)))
+               (concat "Status code: " (number-to-string status-code))
+               (pp-to-string error-thrown))
+              (error "Got error %S: %S" status-code error-thrown))
              ;; Fetch was successful.
              (t response))))))))
 
@@ -1037,7 +1042,8 @@ Returns a ‘deferred’ object that can be used to wait for completion."
               (set-marker marker nil)
               (org-gcal--notify
                "Got Error"
-               "Could not contact remote service. Please check your network connectivity."))
+               "Could not contact remote service. Please check your network connectivity.")
+              (error "Network connectivity issue"))
              ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
                           status))
               (org-gcal--notify
@@ -1065,18 +1071,17 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                       (save-excursion
                         (with-current-buffer (marker-buffer marker)
                           (goto-char (marker-position marker))
-                          (set-marker marker nil)
                           (org-gcal--update-entry
                            calendar-id
-                           (request-response-data response)))))))))
+                           (request-response-data response))))
+                      (deferred:succeed nil))))))
              ;; Generic error-handler meant to provide useful information about
              ;; failure cases not otherwise explicitly specified.
              ((not (eq error-msg nil))
-              (set-marker marker nil)
-              (message "error-msg: %S" error-msg)
               (org-gcal--notify
                (concat "Status code: " (number-to-string status))
-               (pp-to-string error-msg)))
+               (pp-to-string error-msg))
+              (error "Got error %S: %S" status-code error-thrown))
              ;; Fetch was successful.
              (t
               (unless skip-export
@@ -1084,12 +1089,12 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                   (save-excursion
                     (with-current-buffer (marker-buffer marker)
                       (goto-char (marker-position marker))
-                      (set-marker marker nil)
                       ;; Update the entry to add ETag, as well as other
                       ;; properties if this is a newly-created event.
                       (org-gcal--update-entry calendar-id data)))
                   (org-gcal--notify "Event Posted"
-                                    (concat "Org-gcal post event\n  " (plist-get data :summary)))))))))))))
+                                    (concat "Org-gcal post event\n  " (plist-get data :summary)))))
+              (deferred:succeed nil)))))))))
 
 
 (defun org-gcal--delete-event (calendar-id event-id etag marker &optional a-token)
@@ -1098,13 +1103,13 @@ Deletes an event on Calendar CALENDAR-ID with EVENT-ID. The Org buffer and
 point from which the event is read is given by MARKER.
 
 If ETAG is provided, it is used to retrieve the event data from the server and
-overwrite the event at MARKER if the event has changed on the server. MARKER is
-freed by this function.
+overwrite the event at MARKER if the event has changed on the server.
 
 Returns a ‘deferred’ object that can be used to wait for completion."
   (let ((a-token (if a-token
                      a-token
                    (org-gcal--get-access-token))))
+    ;; TODO: Use `deferred:try' to free the marker at the finally stage.
     (deferred:$
       (request-deferred
        (concat
@@ -1130,10 +1135,10 @@ Returns a ‘deferred’ object that can be used to wait for completion."
              ;; If there is no network connectivity, the response will not
              ;; include a status code.
              ((eq status nil)
-              (set-marker marker nil)
               (org-gcal--notify
                "Got Error"
-               "Could not contact remote service. Please check your network connectivity."))
+               "Could not contact remote service. Please check your network connectivity.")
+              (error "Network connectivity issue"))
              ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
                           status))
               (org-gcal--notify
@@ -1159,7 +1164,6 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                     (save-excursion
                       (with-current-buffer (marker-buffer marker)
                         (goto-char (marker-position marker))
-                        (set-marker marker nil)
                         (org-gcal--update-entry
                          calendar-id
                          (request-response-data response))))))))
