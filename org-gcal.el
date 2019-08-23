@@ -146,12 +146,7 @@ entries."
 (defconst org-gcal-events-url "https://www.googleapis.com/calendar/v3/calendars/%s/events")
 
 (cl-defstruct (org-gcal--event-entry
-               (:constructor nil)
-               (:constructor org-gcal--event-entry-create
-                             (&key entry-id
-                                   marker
-                                   event
-                                   &allow-other-keys)))
+               (:constructor org-gcal--event-entry-create))
   ;; Entry ID. Created by ‘org-gcal--format-entry-id’.
   entry-id
   ;; Optional marker pointing to entry-id.
