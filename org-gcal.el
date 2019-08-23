@@ -249,20 +249,23 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                 (goto-char (point-max))
                 (cl-loop
                  for event across events
-                 collect
+                 if
                  (let* ((entry-id (org-gcal--format-entry-id
                                    calendar-id (plist-get event :id)))
                         (marker (org-id-find entry-id 'markerp)))
-                   (if marker
-                       (org-gcal--event-entry-create
-                        :entry-id entry-id
-                        :marker marker
-                        :event event)
+                   (cond
+                    (marker
+                     (org-gcal--event-entry-create
+                      :entry-id entry-id
+                      :marker marker
+                      :event event))
+                    (t
                      ;; Otherwise, insert a new entry into the
                      ;; default fetch file.
                      (insert "\n* ")
                      (org-gcal--update-entry calendar-id event)
-                     (return)))))))
+                     nil)))
+                 collect it))))
           ;; Find already retrieved entries and update them. This will update
           ;; events that have been moved from the default fetch file.
           (deferred:nextc it
@@ -504,9 +507,9 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
         (re-search-forward
          "\\(?:^[ \t]*$\\)*\\([^z-a]*?\\)\n?[ \t]*:END:"
          (save-excursion (outline-next-heading) (point)))
-        (setq desc (match-string 1))
+        (setq desc (match-string-no-properties 1))
         (setq desc
-              (if (string-match-p "\n*" desc)
+              (if (string-match-p "\\‘\n*\\’" desc)
                   nil
                 (replace-regexp-in-string
                  "^✱" "*"
