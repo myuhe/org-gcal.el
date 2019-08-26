@@ -145,6 +145,15 @@ entries."
 
 (defconst org-gcal-events-url "https://www.googleapis.com/calendar/v3/calendars/%s/events")
 
+(cl-defstruct (org-gcal--event-entry
+               (:constructor org-gcal--event-entry-create))
+  ;; Entry ID. Created by ‘org-gcal--format-entry-id’.
+  entry-id
+  ;; Optional marker pointing to entry-id.
+  marker
+  ;; Optional Event resource fetched from server.
+  event)
+
 ;;;###autoload
 (defun org-gcal-sync (&optional a-token skip-export silent)
   "Import events from calendars.
@@ -157,115 +166,132 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
       (with-current-buffer
           (find-file-noselect (cdr i))
         (org-gcal--archive-old-event))))
-  (cl-loop for x in org-gcal-fetch-file-alist
-           do
-           (let ((x x)
-                 (a-token (if a-token
-                              a-token
-                            (org-gcal--get-access-token)))
+  (deferred:loop org-gcal-fetch-file-alist
+    (lambda (x)
+      (let* ((calendar-id (car x))
+             (calendar-file (cdr x))
+             (a-token (if a-token
+                          a-token
+                        (org-gcal--get-access-token)))
 
-                 (skip-export skip-export)
-                 (silent silent))
-             (deferred:$
-               (request-deferred
-                (format org-gcal-events-url (car x))
-                :type "GET"
-                :params `(("access_token" . ,a-token)
-                          ("key" . ,org-gcal-client-secret)
-                          ("singleEvents" . "True")
-                          ("orderBy" . "startTime")
-                          ("timeMin" . ,(org-gcal--subtract-time))
-                          ("timeMax" . ,(org-gcal--add-time))
-                          ("grant_type" . "authorization_code"))
-                :parser 'org-gcal--json-read
-                :error
-                (cl-function (lambda (&key error-thrown &allow-other-keys)
-                               (message "Got error: %S" error-thrown))))
-               (deferred:nextc it
-                 (lambda (response)
-                   (let
-                       ((temp (request-response-data response))
-                        (status (request-response-status-code response))
-                        (error-msg (request-response-error-thrown response)))
-                     (cond
-                      ;; If there is no network connectivity, the response will
-                      ;; not include a status code.
-                      ((eq status nil)
-                       (org-gcal--notify
-                        "Got Error"
-                        "Could not contact remote service. Please check your network connectivity."))
-                      ;; Receiving a 403 response could mean that the calendar
-                      ;; API has not been enabled. When the user goes and
-                      ;; enables it, a new token will need to be generated. This
-                      ;; takes care of that step.
-                      ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
-                                   status))
-                       (org-gcal--notify
-                        "Received HTTP 401"
-                        "OAuth token expired. Now trying to refresh-token")
-                       (deferred:next
-                         (lambda()
-                           (org-gcal-refresh-token 'org-gcal-sync nil skip-export))))
-                      ((eq 403 status)
-                       (org-gcal--notify "Received HTTP 403"
-                                             "Ensure you enabled the Calendar API through the Developers Console, then try again.")
-                       (deferred:nextc it
-                         (lambda()
-                           (org-gcal-refresh-token 'org-gcal-sync nil skip-export))))
-                      ;; We got some 2xx response, but for some reason no
-                      ;; message body.
-                      ((and (> 299 status) (eq temp nil))
-                       (org-gcal--notify
-                        (concat "Received HTTP" (number-to-string status))
-                        "Error occured, but no message body."))
-                      ((not (eq error-msg nil))
-                       ;; Generic error-handler meant to provide useful
-                       ;; information about failure cases not otherwise
-                       ;; explicitly specified.
-                       (org-gcal--notify
-                        (concat "Status code: " (number-to-string status))
-                        (pp-to-string error-msg)))
-                      ;; Fetch was successful.
-                      (t
-                       (with-current-buffer (find-file-noselect (cdr x))
-                         (goto-char (point-max))
-                         (let ((items (org-gcal--filter (plist-get (request-response-data response) :items))))
-                           (mapcar
-                            (lambda (event)
-                              (let ((marker (org-id-find
-                                             (org-gcal--format-entry-id
-                                              (car x)
-                                              (plist-get event :id))
-                                             'markerp)))
-                                (if marker
-                                    ;; If the ID has been retrieved already,
-                                    ;; find the event and update it. This will
-                                    ;; update events that have been moved from
-                                    ;; the default fetch file.
-                                    (org-with-point-at marker
-                                      ;; If skipping exports, just overwrite
-                                      ;; current entry's calendar data with
-                                      ;; what's been retrieved from the
-                                      ;; server. Otherwise, sync the entry at
-                                      ;; the current point.
-                                      (if skip-export
-                                          (org-gcal--update-entry (car x) event)
-                                        (org-gcal-post-at-point 'skip-import skip-export)))
-                                  ;; Otherwise, insert a new entry into the
-                                  ;; default fetch file.
-                                  (insert "\n* ")
-                                  (org-gcal--update-entry (car x) event))))
-                            items)
-                           ;; Update token file.
-                           (let ((token (with-temp-buffer (insert-file-contents org-gcal-token-file)
-                                                          (read (buffer-string)))))
-                             (with-temp-file org-gcal-token-file
-                               (pp token (current-buffer)))))
-                         (org-set-startup-visibility)
-                         (save-buffer))
-                       (unless silent
-                         (org-gcal--notify "Completed event fetching ."
-                                               (concat "Events fetched into\n" (cdr x)))))))))))))
+             (skip-export skip-export)
+             (silent silent))
+        (deferred:$
+          (request-deferred
+           (format org-gcal-events-url calendar-id)
+           :type "GET"
+           :params `(("access_token" . ,a-token)
+                     ("key" . ,org-gcal-client-secret)
+                     ("singleEvents" . "True")
+                     ("orderBy" . "startTime")
+                     ("timeMin" . ,(org-gcal--subtract-time))
+                     ("timeMax" . ,(org-gcal--add-time))
+                     ("grant_type" . "authorization_code"))
+           :parser 'org-gcal--json-read)
+          (deferred:nextc it
+            (lambda (response)
+              (let
+                  ((data (request-response-data response))
+                   (status-code (request-response-status-code response))
+                   (error-thrown (request-response-error-thrown response)))
+                (cond
+                 ;; If there is no network connectivity, the response will
+                 ;; not include a status code.
+                 ((eq status-code nil)
+                  (org-gcal--notify
+                   "Got Error"
+                   "Could not contact remote service. Please check your network connectivity.")
+                  (error "Got error %S: %S" status-code error-thrown))
+                 ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
+                              status-code))
+                  (org-gcal--notify
+                   "Received HTTP 401"
+                   "OAuth token expired. Now trying to refresh-token")
+                  (deferred:$
+                    (org-gcal--refresh-token)
+                    (deferred:nextc it
+                      (lambda (a-token)
+                        (org-gcal-sync a-token skip-export silent)))))
+                 ((eq 403 status-code)
+                  (org-gcal--notify "Received HTTP 403"
+                                    "Ensure you enabled the Calendar API through the Developers Console, then try again.")
+                  (error "Got error %S: %S" status-code error-thrown))
+                 ;; We got some 2xx response, but for some reason no
+                 ;; message body.
+                 ((and (> 299 status-code) (eq data nil))
+                  (org-gcal--notify
+                   (concat "Received HTTP" (number-to-string status-code))
+                   "Error occured, but no message body.")
+                  (error "Got error %S: %S" status-code error-thrown))
+                 ((not (eq error-thrown nil))
+                  ;; Generic error-handler meant to provide useful
+                  ;; information about failure cases not otherwise
+                  ;; explicitly specified.
+                  (org-gcal--notify
+                   (concat "Status code: " (number-to-string status-code))
+                   (pp-to-string error-thrown))
+                  (error "Got error %S: %S" status-code error-thrown))
+                 ;; Fetch was successful. Return the list of events retrieved for
+                 ;; further processing.
+                 (t
+                  (org-gcal--filter (plist-get data :items)))))))
+          ;; Iterate over all events. For previously unretrieved events, add
+          ;; them to the bottom of the file. For retrieved events, just collect
+          ;; them into a list and pass to the next step.
+          (deferred:nextc it
+            (lambda (events)
+              (with-current-buffer (find-file-noselect calendar-file)
+                (goto-char (point-max))
+                (cl-loop
+                 for event across events
+                 if
+                 (let* ((entry-id (org-gcal--format-entry-id
+                                   calendar-id (plist-get event :id)))
+                        (marker (org-id-find entry-id 'markerp)))
+                   (cond
+                    (marker
+                     (org-gcal--event-entry-create
+                      :entry-id entry-id
+                      :marker marker
+                      :event event))
+                    (t
+                     ;; Otherwise, insert a new entry into the
+                     ;; default fetch file.
+                     (insert "\n* ")
+                     (org-gcal--update-entry calendar-id event)
+                     nil)))
+                 collect it))))
+          ;; Find already retrieved entries and update them. This will update
+          ;; events that have been moved from the default fetch file.
+          (deferred:nextc it
+            (lambda (entries)
+              (deferred:loop entries
+                (lambda (entry)
+                  (deferred:$
+                    (let ((marker (or (org-gcal--event-entry-marker entry)
+                                      (org-id-find (org-gcal--event-entry-entry-id entry))))
+                          (event (org-gcal--event-entry-event entry)))
+                      (org-with-point-at marker
+                        ;; If skipping exports, just overwrite current entry's
+                        ;; calendar data with what's been retrieved from the
+                        ;; server. Otherwise, sync the entry at the current
+                        ;; point.
+                        (set-marker marker nil)
+                        (if (and skip-export event)
+                            (progn
+                              (org-gcal--update-entry calendar-id event)
+                              (deferred:succeed nil))
+                          (org-gcal-post-at-point 'skip-import skip-export))))
+                    ;; Log but otherwise ignore errors.
+                    (deferred:error it
+                      (lambda (err)
+                        (message "org-gcal-sync: error: %s" err))))))))
+          (deferred:nextc it
+            (lambda (_)
+              (unless silent
+                (org-gcal--notify "Completed event fetching ."
+                                  (concat "Events fetched into\n" calendar-file)))
+              (deferred:succeed nil))))))))
 
 ;;;###autoload
 (defun org-gcal-fetch ()
@@ -285,16 +311,33 @@ modified on the server will overwrite entries in the buffer.
 Set SILENT to non-nil to inhibit notifications."
   (interactive)
   (org-gcal--ensure-token)
-  (save-excursion
-    (goto-char (point-min))
-    (while (re-search-forward
-            (format "^[ \t]*:%s:[ \t]*$" org-gcal-drawer-name)
-            (point-max)
-            'noerror)
-      (org-gcal-post-at-point 'skip-import skip-export)))
-  (unless silent
-    (org-gcal--notify "Completed syncing events in buffer."
-                          (concat "Events synced in\n" (buffer-file-name)))))
+  (let*
+      ((file-name (buffer-file-name))
+       (markers
+        (save-excursion
+          (goto-char (point-min))
+          (cl-loop
+           while (re-search-forward
+                  (format "^[ \t]*:%s:[ \t]*$" org-gcal-drawer-name)
+                  (point-max)
+                  'noerror)
+           collect (point-marker)))))
+    (deferred:$
+      (deferred:loop markers
+        (lambda (marker)
+          (org-with-point-at marker
+            (set-marker marker nil)
+            (deferred:$
+              (org-gcal-post-at-point 'skip-import skip-export)
+              (deferred:error it
+                (lambda (err)
+                  (message "org-gcal-sync-buffer: error: %s" err)))))))
+      (deferred:nextc it
+        (lambda (_)
+          (unless silent
+            (org-gcal--notify "Completed syncing events in buffer."
+                              (concat "Events synced in\n" file-name)))
+          (deferred:succeed nil))))))
 
 ;;;###autoload
 (defun org-gcal-fetch-buffer (&optional a-token skip-export silent)
@@ -421,7 +464,8 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
     (when (eq major-mode 'org-agenda-mode)
       (let ((m (org-get-at-bol 'org-hd-marker)))
         (set-buffer (marker-buffer m))
-        (goto-char (marker-position m))))
+        (goto-char (marker-position m))
+        (set-marker m nil)))
     (end-of-line)
     (org-gcal--back-to-heading)
     (let* ((skip-import skip-import)
@@ -463,9 +507,9 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
         (re-search-forward
          "\\(?:^[ \t]*$\\)*\\([^z-a]*?\\)\n?[ \t]*:END:"
          (save-excursion (outline-next-heading) (point)))
-        (setq desc (match-string 1))
+        (setq desc (match-string-no-properties 1))
         (setq desc
-              (if (string-match-p "\n*" desc)
+              (if (string-match-p "\\‘\n*\\’" desc)
                   nil
                 (replace-regexp-in-string
                  "^✱" "*"
@@ -508,7 +552,8 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
     (when (eq major-mode 'org-agenda-mode)
       (let ((m (org-get-at-bol 'org-hd-marker)))
         (set-buffer (marker-buffer m))
-        (goto-char (marker-position m))))
+        (goto-char (marker-position m))
+        (set-marker m nil)))
     (end-of-line)
     (org-gcal--back-to-heading)
     (let* ((marker (point-marker))
@@ -555,31 +600,31 @@ It returns the code provided by the service."
         (let
             ((data (request-response-data response))
              (status (request-response-status-code response))
-             (error-msg (request-response-error-thrown response)))
+             (error-thrown (request-response-error-thrown response)))
           (cond
            ;; If there is no network connectivity, the response will not
            ;; include a status code.
            ((eq status nil)
-            (set-marker marker nil)
             (org-gcal--notify
              "Got Error"
-             "Could not contact remote service. Please check your network connectivity."))
+             "Could not contact remote service. Please check your network connectivity.")
+            (error "Network connectivity issue" status-code error-thrown))
            ;; Generic error-handler meant to provide useful information about
            ;; failure cases not otherwise explicitly specified.
-           ((not (eq error-msg nil))
+           ((not (eq error-thrown nil))
             (org-gcal--notify
              (concat "Status code: " (number-to-string status))
-             (pp-to-string error-msg)))
+             (pp-to-string error-thrown))
+            (error "Got error %S: %S" status-code error-thrown))
            ;; Fetch was successful.
            (t
             (when data
               (setq org-gcal-token-plist data)
-              (org-gcal--save-sexp data org-gcal-token-file)))))))))
+              (org-gcal--save-sexp data org-gcal-token-file))
+            (deferred:succeed nil))))))))
 
-(defun org-gcal-refresh-token (&optional fun skip-import skip-export start end smry loc desc marker calendar-id etag event-id)
-  "Refresh OAuth access and call FUN after that.
-Pass SKIP-IMPORT, SKIP-EXPORT, START, END, SMRY, LOC, DESC.  and EVENT-ID to FUN if
-needed. For handling of MARKER see docstring for the function referenced by FUN."
+(defun org-gcal--refresh-token ()
+  "Refresh OAuth access and return the new access token as a deferred object."
   (deferred:$
     (request-deferred
      org-gcal-token-url
@@ -588,31 +633,22 @@ needed. For handling of MARKER see docstring for the function referenced by FUN.
              ("client_secret" . ,org-gcal-client-secret)
              ("refresh_token" . ,(org-gcal--get-refresh-token))
              ("grant_type" . "refresh_token"))
-     :parser 'org-gcal--json-read
-     :error
-     (cl-function (lambda (&key error-thrown &allow-other-keys)
-                    (message "Got error: %S" error-thrown))))
+     :parser 'org-gcal--json-read)
     (deferred:nextc it
       (lambda (response)
-        (let ((temp (request-response-data response)))
-          (plist-put org-gcal-token-plist
-                     :access_token
-                     (plist-get temp :access_token))
-          (org-gcal--save-sexp org-gcal-token-plist org-gcal-token-file)
-          org-gcal-token-plist)))
-    (deferred:nextc it
-      (lambda (token)
-        (cond ((eq fun 'org-gcal-sync)
-               (org-gcal-sync (plist-get token :access_token) skip-export))
-              ((eq fun 'org-gcal--get-event)
-               (org-gcal--get-event
-                calendar-id event-id (plist-get token :access_token)))
-              ((eq fun 'org-gcal--post-event)
-               (org-gcal--post-event
-                start end smry loc desc calendar-id marker etag event-id (plist-get token :access_token)
-                skip-import skip-export))
-              ((eq fun 'org-gcal--delete-event)
-               (org-gcal--delete-event calendar-id event-id etag marker (plist-get token :access_token))))))))
+        (let ((data (request-response-data response))
+              (status-code (request-response-status-code response))
+              (error-thrown (request-response-error-thrown response)))
+          (cond
+           ((eq error-thrown nil)
+            (plist-put org-gcal-token-plist
+                       :access_token
+                       (plist-get data :access_token))
+            (org-gcal--save-sexp org-gcal-token-plist org-gcal-token-file)
+            (plist-get org-gcal-token-plist :access_token)
+            (deferred:succeed nil))
+           (t
+            (error "Got error %S: %S" status-code error-thrown))))))))
 
 ;; Internal
 (defun org-gcal--archive-old-event ()
@@ -675,8 +711,8 @@ needed. For handling of MARKER see docstring for the function referenced by FUN.
             (with-temp-buffer (insert-file-contents org-gcal-token-file)
                               (plist-get (plist-get (read (buffer-string)) :token) :refresh_token)))
         (org-gcal--notify
-         (concat org-gcal-token-file " is not exists")
-         (concat "Make" org-gcal-token-file))))))
+         (concat org-gcal-token-file " does not exist.")
+         (concat "Please create " org-gcal-token-file " before proceeding."))))))
 
 (defun org-gcal--get-access-token ()
   (if org-gcal-token-plist
@@ -923,33 +959,34 @@ object."
       (deferred:nextc it
         (lambda (response)
           (let
-              ((temp (request-response-data response))
-               (status (request-response-status-code response))
-               (error-msg (request-response-error-thrown response)))
+              ((data (request-response-data response))
+               (status-code (request-response-status-code response))
+               (error-thrown (request-response-error-thrown response)))
             (cond
              ;; If there is no network connectivity, the response will not
              ;; include a status code.
-             ((eq status nil)
-              (set-marker marker nil)
+             ((eq status-code nil)
               (org-gcal--notify
                "Got Error"
-               "Could not contact remote service. Please check your network connectivity."))
+               "Could not contact remote service. Please check your network connectivity.")
+              (error "Network connectivity issue"))
              ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
-                          status))
+                          status-code))
               (org-gcal--notify
                "Received HTTP 401"
-               "OAuth token expired. Now trying to refresh-token")
-              (deferred:next
-                (lambda ()
-                  (org-gcal-refresh-token 'org-gcal--get-event
-                                          nil nil nil nil nil nil nil nil calendar-id nil event-id))))
+               "OAuth token expired. Now trying to refresh token.")
+              (deferred:$
+                (org-gcal--refresh-token)
+                (deferred:nextc it
+                  (lambda (a-token)
+                    (org-gcal--get-event calendar-id event-id a-token)))))
              ;; Generic error-handler meant to provide useful information about
              ;; failure cases not otherwise explicitly specified.
-             ((not (eq error-msg nil))
-              (set-marker marker nil)
+             ((not (eq error-thrown nil))
               (org-gcal--notify
-               (concat "Status code: " (number-to-string status))
-               (pp-to-string error-msg)))
+               (concat "Status code: " (number-to-string status-code))
+               (pp-to-string error-thrown))
+              (error "Got error %S: %S" status-code error-thrown))
              ;; Fetch was successful.
              (t response))))))))
 
@@ -961,7 +998,7 @@ by MARKER.
 
 If ETAG is provided, it is used to retrieve the event data from the server and
 overwrite the event at MARKER if the event has changed on the server. MARKER is
-freed by this function.
+destroyed by this function.
 
 Returns a ‘deferred’ object that can be used to wait for completion."
   (let ((stime (org-gcal--param-date start))
@@ -971,60 +1008,160 @@ Returns a ‘deferred’ object that can be used to wait for completion."
         (a-token (if a-token
                      a-token
                    (org-gcal--get-access-token))))
-    (deferred:$
-      (request-deferred
-       (concat
-        (format org-gcal-events-url calendar-id)
-        (when (and event-id etag)
-          (concat "/" event-id)))
-       :type (if event-id "PATCH" "POST")
-       :headers (append
-                 '(("Content-Type" . "application/json"))
-                 (if (null etag) nil
-                   `(("If-Match" . ,etag))))
-       :data (encode-coding-string
-              (json-encode `(("start" (,stime . ,start) (,stime-alt . nil))
-                             ("end" (,etime . ,(if (equal "date" etime)
-                                                   (org-gcal--iso-next-day end)
-                                                 end)) (,etime-alt . nil))
-                             ("summary" . ,smry)
-                             ("location" . ,loc)
-                             ("description" . ,desc)))
-              'utf-8)
-       :params `(("access_token" . ,a-token)
-                 ("key" . ,org-gcal-client-secret)
-                 ("grant_type" . "authorization_code"))
+    (deferred:try
+      (deferred:$
+        (request-deferred
+         (concat
+          (format org-gcal-events-url calendar-id)
+          (when (and event-id etag)
+            (concat "/" event-id)))
+         :type (if event-id "PATCH" "POST")
+         :headers (append
+                   '(("Content-Type" . "application/json"))
+                   (if (null etag) nil
+                     `(("If-Match" . ,etag))))
+         :data (encode-coding-string
+                (json-encode `(("start" (,stime . ,start) (,stime-alt . nil))
+                               ("end" (,etime . ,(if (equal "date" etime)
+                                                     (org-gcal--iso-next-day end)
+                                                   end)) (,etime-alt . nil))
+                               ("summary" . ,smry)
+                               ("location" . ,loc)
+                               ("description" . ,desc)))
+                'utf-8)
+         :params `(("access_token" . ,a-token)
+                   ("key" . ,org-gcal-client-secret)
+                   ("grant_type" . "authorization_code"))
 
-       :parser 'org-gcal--json-read)
-      (deferred:nextc it
-        (lambda (response)
-          (let
-              ((temp (request-response-data response))
-               (status (request-response-status-code response))
-               (error-msg (request-response-error-thrown response)))
-            (cond
-             ;; If there is no network connectivity, the response will not
-             ;; include a status code.
-             ((eq status nil)
-              (set-marker marker nil)
-              (org-gcal--notify
-               "Got Error"
-               "Could not contact remote service. Please check your network connectivity."))
-             ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
-                          status))
-              (org-gcal--notify
-               "Received HTTP 401"
-               "OAuth token expired. Now trying to refresh-token")
-              (deferred:next
-                (lambda ()
-                  (org-gcal-refresh-token 'org-gcal--post-event
-                                          skip-import skip-export start end smry
-                                          loc desc marker calendar-id etag event-id))))
-             ;; ETag on current entry is stale. This means the event on the
-             ;; server has been updated. In that case, update the event using
-             ;; the data from the server.
-             ((eq status 412)
-              (unless skip-import
+         :parser 'org-gcal--json-read)
+        (deferred:nextc it
+          (lambda (response)
+            (let
+                ((temp (request-response-data response))
+                 (status (request-response-status-code response))
+                 (error-msg (request-response-error-thrown response)))
+              (cond
+               ;; If there is no network connectivity, the response will not
+               ;; include a status code.
+               ((eq status nil)
+                (org-gcal--notify
+                 "Got Error"
+                 "Could not contact remote service. Please check your network connectivity.")
+                (error "Network connectivity issue"))
+               ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
+                            status))
+                (org-gcal--notify
+                 "Received HTTP 401"
+                 "OAuth token expired. Now trying to refresh-token")
+                (deferred:$
+                  (org-gcal--refresh-token)
+                  (deferred:nextc it
+                    (lambda (a-token)
+                      (org-gcal--post-event start end smry loc desc calendar-id
+                                            marker etag event-id a-token
+                                            skip-import skip-export)))))
+               ;; ETag on current entry is stale. This means the event on the
+               ;; server has been updated. In that case, update the event using
+               ;; the data from the server.
+               ((eq status 412)
+                (unless skip-import
+                  (org-gcal--notify
+                   "Received HTTP 412"
+                   "ETag stale - will overwrite this entry with event from server.")
+                  (deferred:$
+                    (org-gcal--get-event calendar-id event-id a-token)
+                    (deferred:nextc it
+                      (lambda (response)
+                        (save-excursion
+                          (with-current-buffer (marker-buffer marker)
+                            (goto-char (marker-position marker))
+                            (org-gcal--update-entry
+                             calendar-id
+                             (request-response-data response))))
+                        (deferred:succeed nil))))))
+               ;; Generic error-handler meant to provide useful information about
+               ;; failure cases not otherwise explicitly specified.
+               ((not (eq error-msg nil))
+                (org-gcal--notify
+                 (concat "Status code: " (number-to-string status))
+                 (pp-to-string error-msg))
+                (error "Got error %S: %S" status-code error-thrown))
+               ;; Fetch was successful.
+               (t
+                (unless skip-export
+                  (let* ((data (request-response-data response)))
+                    (save-excursion
+                      (with-current-buffer (marker-buffer marker)
+                        (goto-char (marker-position marker))
+                        ;; Update the entry to add ETag, as well as other
+                        ;; properties if this is a newly-created event.
+                        (org-gcal--update-entry calendar-id data)))
+                    (org-gcal--notify "Event Posted"
+                                      (concat "Org-gcal post event\n  " (plist-get data :summary)))))
+                (deferred:succeed nil)))))))
+      :finally
+      (lambda ()
+        (set-marker marker nil)))))
+
+
+(defun org-gcal--delete-event (calendar-id event-id etag marker &optional a-token)
+  "\
+Deletes an event on Calendar CALENDAR-ID with EVENT-ID. The Org buffer and
+point from which the event is read is given by MARKER. MARKER is destroyed by
+this function.
+
+If ETAG is provided, it is used to retrieve the event data from the server and
+overwrite the event at MARKER if the event has changed on the server.
+
+Returns a ‘deferred’ object that can be used to wait for completion."
+  (let ((a-token (if a-token
+                     a-token
+                   (org-gcal--get-access-token))))
+    (deferred:try
+      (deferred:$
+        (request-deferred
+         (concat
+          (format org-gcal-events-url calendar-id)
+          (concat "/" event-id))
+         :type "DELETE"
+         :headers (append
+                   '(("Content-Type" . "application/json"))
+                   (if (null etag) nil
+                     `(("If-Match" . ,etag))))
+         :params `(("access_token" . ,a-token)
+                   ("key" . ,org-gcal-client-secret)
+                   ("grant_type" . "authorization_code"))
+
+         :parser 'org-gcal--json-read)
+        (deferred:nextc it
+          (lambda (response)
+            (let
+                ((temp (request-response-data response))
+                 (status (request-response-status-code response))
+                 (error-msg (request-response-error-thrown response)))
+              (cond
+               ;; If there is no network connectivity, the response will not
+               ;; include a status code.
+               ((eq status nil)
+                (org-gcal--notify
+                 "Got Error"
+                 "Could not contact remote service. Please check your network connectivity.")
+                (error "Network connectivity issue"))
+               ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
+                            status))
+                (org-gcal--notify
+                 "Received HTTP 401"
+                 "OAuth token expired. Now trying to refresh-token")
+                (deferred:$
+                  (org-gcal--refresh-token)
+                  (deferred:nextc it
+                    (lambda (a-token)
+                      (org-gcal--delete-event calendar-id event-id
+                                              etag marker a-token)))))
+               ;; ETag on current entry is stale. This means the event on the
+               ;; server has been updated. In that case, update the event using
+               ;; the data from the server.
+               ((eq status 412)
                 (org-gcal--notify
                  "Received HTTP 412"
                  "ETag stale - will overwrite this entry with event from server.")
@@ -1035,113 +1172,22 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                       (save-excursion
                         (with-current-buffer (marker-buffer marker)
                           (goto-char (marker-position marker))
-                          (set-marker marker nil)
                           (org-gcal--update-entry
                            calendar-id
-                           (request-response-data response)))))))))
-             ;; Generic error-handler meant to provide useful information about
-             ;; failure cases not otherwise explicitly specified.
-             ((not (eq error-msg nil))
-              (set-marker marker nil)
-              (message "error-msg: %S" error-msg)
-              (org-gcal--notify
-               (concat "Status code: " (number-to-string status))
-               (pp-to-string error-msg)))
-             ;; Fetch was successful.
-             (t
-              (unless skip-export
-                (let* ((data (request-response-data response)))
-                  (save-excursion
-                    (with-current-buffer (marker-buffer marker)
-                      (goto-char (marker-position marker))
-                      (set-marker marker nil)
-                      ;; Update the entry to add ETag, as well as other
-                      ;; properties if this is a newly-created event.
-                      (org-gcal--update-entry calendar-id data)))
-                  (org-gcal--notify "Event Posted"
-                                    (concat "Org-gcal post event\n  " (plist-get data :summary)))))))))))))
-
-
-(defun org-gcal--delete-event (calendar-id event-id etag marker &optional a-token)
-  "\
-Deletes an event on Calendar CALENDAR-ID with EVENT-ID. The Org buffer and
-point from which the event is read is given by MARKER.
-
-If ETAG is provided, it is used to retrieve the event data from the server and
-overwrite the event at MARKER if the event has changed on the server. MARKER is
-freed by this function.
-
-Returns a ‘deferred’ object that can be used to wait for completion."
-  (let ((a-token (if a-token
-                     a-token
-                   (org-gcal--get-access-token))))
-    (deferred:$
-      (request-deferred
-       (concat
-        (format org-gcal-events-url calendar-id)
-        (concat "/" event-id))
-       :type "DELETE"
-       :headers (append
-                 '(("Content-Type" . "application/json"))
-                 (if (null etag) nil
-                   `(("If-Match" . ,etag))))
-       :params `(("access_token" . ,a-token)
-                 ("key" . ,org-gcal-client-secret)
-                 ("grant_type" . "authorization_code"))
-
-       :parser 'org-gcal--json-read)
-      (deferred:nextc it
-        (lambda (response)
-          (let
-              ((temp (request-response-data response))
-               (status (request-response-status-code response))
-               (error-msg (request-response-error-thrown response)))
-            (cond
-             ;; If there is no network connectivity, the response will not
-             ;; include a status code.
-             ((eq status nil)
-              (set-marker marker nil)
-              (org-gcal--notify
-               "Got Error"
-               "Could not contact remote service. Please check your network connectivity."))
-             ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
-                          status))
-              (org-gcal--notify
-               "Received HTTP 401"
-               "OAuth token expired. Now trying to refresh-token")
-              (deferred:next
-                (lambda ()
-                  (org-gcal-refresh-token 'org-gcal--delete-event
-                                          nil nil nil nil nil nil nil marker calendar-id etag event-id))))
-             ;; ETag on current entry is stale. This means the event on the
-             ;; server has been updated. In that case, update the event using
-             ;; the data from the server.
-             ((eq status 412)
-              (org-gcal--notify
-               "Received HTTP 412"
-               "ETag stale - will overwrite this entry with event from server.")
-              (deferred:$
-                (org-gcal--get-event calendar-id event-id a-token)
-                (deferred:nextc it
-                  (lambda (response)
-                    (save-excursion
-                      (with-current-buffer (marker-buffer marker)
-                        (goto-char (marker-position marker))
-                        (set-marker marker nil)
-                        (org-gcal--update-entry
-                         calendar-id
-                         (request-response-data response))))))))
-             ;; Generic error-handler meant to provide useful information about
-             ;; failure cases not otherwise explicitly specified.
-             ((not (eq error-msg nil))
-              (set-marker marker nil)
-              (org-gcal--notify
-               (concat "Status code: " (number-to-string status))
-               (pp-to-string error-msg)))
-             ;; Fetch was successful.
-             (t
-              (set-marker marker nil)
-              (org-gcal--notify "Event Deleted" "Org-gcal deleted event")))))))))
+                           (request-response-data response))))))))
+               ;; Generic error-handler meant to provide useful information about
+               ;; failure cases not otherwise explicitly specified.
+               ((not (eq error-msg nil))
+                (org-gcal--notify
+                 (concat "Status code: " (number-to-string status))
+                 (pp-to-string error-msg))
+                (error "Got error %S: %S" status-code error-thrown))
+               ;; Fetch was successful.
+               (t
+                (org-gcal--notify "Event Deleted" "Org-gcal deleted event")))))))
+      :finally
+      (lambda ()
+        (set-marker marker nil)))))
 
 (defun org-gcal--capture-post ()
   (dolist (i org-gcal-fetch-file-alist)
