@@ -281,7 +281,7 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                             (progn
                               (org-gcal--update-entry calendar-id event)
                               (deferred:succeed nil))
-                          (org-gcal-post-at-point 'skip-import skip-export))))
+                          (org-gcal-post-at-point nil skip-export))))
                     ;; Log but otherwise ignore errors.
                     (deferred:error it
                       (lambda (err)
