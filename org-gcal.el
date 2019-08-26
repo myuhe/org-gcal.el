@@ -312,23 +312,46 @@ Set SILENT to non-nil to inhibit notifications."
   (interactive)
   (org-gcal--ensure-token)
   (let*
-      ((file-name (buffer-file-name))
+      ((name (or (buffer-file-name) (buffer-name)))
+       (drawer-point
+        (lambda ()
+          (re-search-forward
+           (format "^[ \t]*:%s:[ \t]*$" org-gcal-drawer-name)
+           (point-max)
+           'noerror)))
        (markers
         (save-excursion
           (goto-char (point-min))
-          (cl-loop
-           while (re-search-forward
-                  (format "^[ \t]*:%s:[ \t]*$" org-gcal-drawer-name)
-                  (point-max)
-                  'noerror)
-           collect (point-marker)))))
+          (cond
+           ((eq major-mode 'org-mode)
+            (cl-loop
+             while (funcall drawer-point)
+             collect (point-marker)))
+           ((eq major-mode 'org-agenda-mode)
+            (cl-loop
+             while (not (eobp))
+             if
+             (let ((m (org-get-at-bol 'org-hd-marker)))
+               (when m
+                 (org-with-point-at m
+                   (save-restriction
+                     (org-narrow-to-element)
+                     (if (funcall drawer-point)
+                         m
+                       ;; No org-gcal drawer present - this is not an org-gcal
+                       ;; entry, so skip it.
+                       nil)))))
+             collect it
+             do (forward-line 1)))
+           (t
+            (user-error "Unsupported major mode %s in current buffer" major-mode))))))
     (deferred:$
       (deferred:loop markers
         (lambda (marker)
           (org-with-point-at marker
             (set-marker marker nil)
             (deferred:$
-              (org-gcal-post-at-point 'skip-import skip-export)
+              (org-gcal-post-at-point nil skip-export)
               (deferred:error it
                 (lambda (err)
                   (message "org-gcal-sync-buffer: error: %s" err)))))))
@@ -336,7 +359,7 @@ Set SILENT to non-nil to inhibit notifications."
         (lambda (_)
           (unless silent
             (org-gcal--notify "Completed syncing events in buffer."
-                              (concat "Events synced in\n" file-name)))
+                              (concat "Events synced in\n" name)))
           (deferred:succeed nil))))))
 
 ;;;###autoload
