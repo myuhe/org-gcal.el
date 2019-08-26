@@ -337,7 +337,7 @@ Set SILENT to non-nil to inhibit notifications."
                    (save-restriction
                      (org-narrow-to-element)
                      (if (funcall drawer-point)
-                         m
+                         (point-marker)
                        ;; No org-gcal drawer present - this is not an org-gcal
                        ;; entry, so skip it.
                        nil)))))
@@ -487,8 +487,7 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
     (when (eq major-mode 'org-agenda-mode)
       (let ((m (org-get-at-bol 'org-hd-marker)))
         (set-buffer (marker-buffer m))
-        (goto-char (marker-position m))
-        (set-marker m nil)))
+        (goto-char (marker-position m))))
     (end-of-line)
     (org-gcal--back-to-heading)
     (let* ((skip-import skip-import)
@@ -575,8 +574,7 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
     (when (eq major-mode 'org-agenda-mode)
       (let ((m (org-get-at-bol 'org-hd-marker)))
         (set-buffer (marker-buffer m))
-        (goto-char (marker-position m))
-        (set-marker m nil)))
+        (goto-char (marker-position m))))
     (end-of-line)
     (org-gcal--back-to-heading)
     (let* ((marker (point-marker))
