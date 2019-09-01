@@ -5,7 +5,7 @@
 ;; Version: 0.3
 ;; Maintainer: Raimon Grau <raimonster@gmail.com>
 ;; Copyright (C) :2014 myuhe all rights reserved.
-;; Package-Requires: ((request-deferred "0.2.0") (alert "1.1") (emacs "24") (cl-lib "0.5") (org "8.2.4"))
+;; Package-Requires: ((request "20190901") (request-deferred "20181129") (alert) (emacs "26"))
 ;; Keywords: convenience,
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -300,7 +300,7 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
   (org-gcal-sync nil t))
 
 ;;;###autoload
-(defun org-gcal-sync-buffer (&optional a-token skip-export silent)
+(defun org-gcal-sync-buffer (&optional _a-token skip-export silent)
   "\
 Sync entries containing Calendar events in the currently-visible portion of the
 buffer.
@@ -363,7 +363,7 @@ Set SILENT to non-nil to inhibit notifications."
           (deferred:succeed nil))))))
 
 ;;;###autoload
-(defun org-gcal-fetch-buffer (&optional a-token skip-export silent)
+(defun org-gcal-fetch-buffer (&optional _a-token _skip-export _silent)
   "\
 Fetch changes to events in the currently-visible portion of the buffer, not
 writing any changes to Calendar."
@@ -436,7 +436,7 @@ canonical ID, so that existing links won’t be broken."
            (lambda (id)
              (newline)
              (insert indentation ":ID: " id))
-           (remove-if (lambda (x) (string= x entry-id)) ids)))))))
+           (cl-remove-if (lambda (x) (string= x entry-id)) ids)))))))
 
 (defun org-gcal--event-id-from-entry-id (entry-id)
   "Parse an ENTRY-ID created by ‘org-gcal--format-entry-id’ and return EVENT-ID."
@@ -620,21 +620,21 @@ It returns the code provided by the service."
       (lambda (response)
         (let
             ((data (request-response-data response))
-             (status (request-response-status-code response))
+             (status-code (request-response-status-code response))
              (error-thrown (request-response-error-thrown response)))
           (cond
            ;; If there is no network connectivity, the response will not
            ;; include a status code.
-           ((eq status nil)
+           ((eq status-code nil)
             (org-gcal--notify
              "Got Error"
              "Could not contact remote service. Please check your network connectivity.")
-            (error "Network connectivity issue" status-code error-thrown))
+            (error "Network connectivity issue %s: %s" status-code error-thrown))
            ;; Generic error-handler meant to provide useful information about
            ;; failure cases not otherwise explicitly specified.
            ((not (eq error-thrown nil))
             (org-gcal--notify
-             (concat "Status code: " (number-to-string status))
+             (concat "Status code: " (number-to-string status-code))
              (pp-to-string error-thrown))
             (error "Got error %S: %S" status-code error-thrown))
            ;; Fetch was successful.
@@ -666,8 +666,8 @@ It returns the code provided by the service."
                        :access_token
                        (plist-get data :access_token))
             (org-gcal--save-sexp org-gcal-token-plist org-gcal-token-file)
-            (plist-get org-gcal-token-plist :access_token)
-            (deferred:succeed nil))
+            (let ((_token (plist-get org-gcal-token-plist :access_token)))
+              (deferred:succeed nil)))
            (t
             (error "Got error %S: %S" status-code error-thrown))))))))
 
@@ -852,7 +852,7 @@ an error will be thrown. Point is not preserved."
                     "busy"))
          (desc  (plist-get event :description))
          (loc   (plist-get event :location))
-         (link  (plist-get event :htmlLink))
+         (_link  (plist-get event :htmlLink))
          (meet  (plist-get event :hangoutLink))
          (etag (plist-get event :etag))
          (event-id    (plist-get event :id))
@@ -980,7 +980,7 @@ object."
       (deferred:nextc it
         (lambda (response)
           (let
-              ((data (request-response-data response))
+              ((_data (request-response-data response))
                (status-code (request-response-status-code response))
                (error-thrown (request-response-error-thrown response)))
             (cond
@@ -1058,19 +1058,19 @@ Returns a ‘deferred’ object that can be used to wait for completion."
         (deferred:nextc it
           (lambda (response)
             (let
-                ((temp (request-response-data response))
-                 (status (request-response-status-code response))
+                ((_temp (request-response-data response))
+                 (status-code (request-response-status-code response))
                  (error-msg (request-response-error-thrown response)))
               (cond
                ;; If there is no network connectivity, the response will not
                ;; include a status code.
-               ((eq status nil)
+               ((eq status-code nil)
                 (org-gcal--notify
                  "Got Error"
                  "Could not contact remote service. Please check your network connectivity.")
                 (error "Network connectivity issue"))
                ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
-                            status))
+                            status-code))
                 (org-gcal--notify
                  "Received HTTP 401"
                  "OAuth token expired. Now trying to refresh-token")
@@ -1084,7 +1084,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                ;; ETag on current entry is stale. This means the event on the
                ;; server has been updated. In that case, update the event using
                ;; the data from the server.
-               ((eq status 412)
+               ((eq status-code 412)
                 (unless skip-import
                   (org-gcal--notify
                    "Received HTTP 412"
@@ -1104,9 +1104,9 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                ;; failure cases not otherwise explicitly specified.
                ((not (eq error-msg nil))
                 (org-gcal--notify
-                 (concat "Status code: " (number-to-string status))
+                 (concat "Status code: " (number-to-string status-code))
                  (pp-to-string error-msg))
-                (error "Got error %S: %S" status-code error-thrown))
+                (error "Got error %S: %S" status-code error-msg))
                ;; Fetch was successful.
                (t
                 (unless skip-export
@@ -1157,19 +1157,19 @@ Returns a ‘deferred’ object that can be used to wait for completion."
         (deferred:nextc it
           (lambda (response)
             (let
-                ((temp (request-response-data response))
-                 (status (request-response-status-code response))
+                ((_temp (request-response-data response))
+                 (status-code (request-response-status-code response))
                  (error-msg (request-response-error-thrown response)))
               (cond
                ;; If there is no network connectivity, the response will not
                ;; include a status code.
-               ((eq status nil)
+               ((eq status-code nil)
                 (org-gcal--notify
                  "Got Error"
                  "Could not contact remote service. Please check your network connectivity.")
                 (error "Network connectivity issue"))
                ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
-                            status))
+                            status-code))
                 (org-gcal--notify
                  "Received HTTP 401"
                  "OAuth token expired. Now trying to refresh-token")
@@ -1182,7 +1182,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                ;; ETag on current entry is stale. This means the event on the
                ;; server has been updated. In that case, update the event using
                ;; the data from the server.
-               ((eq status 412)
+               ((eq status-code 412)
                 (org-gcal--notify
                  "Received HTTP 412"
                  "ETag stale - will overwrite this entry with event from server.")
@@ -1200,9 +1200,9 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                ;; failure cases not otherwise explicitly specified.
                ((not (eq error-msg nil))
                 (org-gcal--notify
-                 (concat "Status code: " (number-to-string status))
+                 (concat "Status code: " (number-to-string status-code))
                  (pp-to-string error-msg))
-                (error "Got error %S: %S" status-code error-thrown))
+                (error "Got error %S: %S" status-code error-msg))
                ;; Fetch was successful.
                (t
                 (org-gcal--notify "Event Deleted" "Org-gcal deleted event")))))))
