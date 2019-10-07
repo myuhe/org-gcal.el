@@ -77,6 +77,15 @@ Data will be UTF-8 encoded for sync.
 
    To get more detailed information you can [[https://digibites.zendesk.com/hc/en-us/articles/200299863-How-do-I-share-my-calendar-with-someone-else-Google-Calendar-or-Outlook-com-][check this link]].
 
+* Testing
+
+To execute compile and regression tests, run ~make~.
+
+This will use your existing Emacs installation to generate a value of
+~load-path~ that allows ~org-gcal~ to find all its dependencies, and save it to
+~.load-path.el~ in this directory. To delete this and other temporary files,
+run ~make clean~.
+
 * Usage
 ** =org-gcal-sync=
    Sync between Org and Gcal. before syncing,  execute =org-gcal-fetch= .
