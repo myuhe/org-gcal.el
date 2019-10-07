@@ -1,6 +1,7 @@
 ;;; test-org-gcal.el --- Tests for org-gcal.el -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2019 Robert Irelan
+;; Package-Requires: ((org-gcal) (el-mock))
 
 ;; Author: Robert Irelan <rirelan@gmail.com>
 
@@ -290,12 +291,12 @@ Second paragraph
               (deferred:sync! (request-deferred))
               "Success"))))
 
-;;; Figure out mocking for POST/PATCH followed by GET
+;;; TODO: Figure out mocking for POST/PATCH followed by GET
 ;;; - ‘mock‘ might work for this - the argument list must be specified up
 ;;;   front, but the wildcard ‘*’ can be used to match any value. If that
 ;;;   doesn’t work, use ‘cl-flet’.
 
-;;; Figure out how to set up org-id for mocking (org-mode tests should help?)
+;;; TODO: Figure out how to set up org-id for mocking (org-mode tests should help?)
 ;;; - There are actually no org-mode tests for this.
 ;;; - Set ‘org-id-locations’ (a hash table). This maps each ID to the file in
 ;;;   which the ID is found, so a temp file (not just a temp buffer) is needed.
