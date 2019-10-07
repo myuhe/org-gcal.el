@@ -1,6 +1,6 @@
 EMACS ?= $(shell which emacs)
 SRC=org-gcal.el
-TEST=test-org-gcal.el
+TEST=org-gcal-test.el
 LOAD_PATH=.load-path.el
 ELCFILES = $(SRC:.el=.elc)
 .DEFAULT_GOAL := all

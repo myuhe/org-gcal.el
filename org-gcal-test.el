@@ -1,4 +1,4 @@
-;;; test-org-gcal.el --- Tests for org-gcal.el -*- lexical-binding: t -*-
+;;; org-gcal-test.el --- Tests for org-gcal.el -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2019 Robert Irelan
 ;; Package-Requires: ((org-gcal) (el-mock))
@@ -30,9 +30,9 @@
 (require 'cl-lib)
 (require 'el-mock)
 
-(defconst test-org-gcal-calendar-id "foo@foobar.com")
+(defconst org-gcal-test-calendar-id "foo@foobar.com")
 
-(defconst test-org-gcal-event-json
+(defconst org-gcal-test-event-json
   "\
 {
  \"kind\": \"calendar#event\",
@@ -66,7 +66,7 @@
 }
 ")
 
-(defmacro test-org-gcal--with-temp-buffer (contents &rest body)
+(defmacro org-gcal-test--with-temp-buffer (contents &rest body)
   "Create a ‘org-mode’ enabled temp buffer with CONTENTS.
 BODY is code to be executed within the temp buffer.  Point is
 always located at the beginning of the buffer."
@@ -77,22 +77,22 @@ always located at the beginning of the buffer."
      (goto-char (point-min))
      ,@body))
 
-(defun test-org-gcal--json-read-string (json)
+(defun org-gcal-test--json-read-string (json)
   "Wrap ‘org-gcal--json-read’ to parse a JSON string"
   (with-temp-buffer
     (insert json)
     (org-gcal--json-read)))
 
-(defconst test-org-gcal-event
-  (test-org-gcal--json-read-string test-org-gcal-event-json))
+(defconst org-gcal-test-event
+  (org-gcal-test--json-read-string org-gcal-test-event-json))
 
-(ert-deftest test-org-gcal--update-empty-entry ()
+(ert-deftest org-gcal-test--update-empty-entry ()
   "Verify that an empty headline is populated correctly from a calendar event
 object."
-  (test-org-gcal--with-temp-buffer
+  (org-gcal-test--with-temp-buffer
       "* "
-    (org-gcal--update-entry test-org-gcal-calendar-id
-                            test-org-gcal-event)
+    (org-gcal--update-entry org-gcal-test-calendar-id
+                            org-gcal-test-event)
     (org-back-to-heading)
     (let ((elem (org-element-at-point)))
       (should (equal (org-element-property :title elem)
@@ -121,10 +121,10 @@ My event description
 Second paragraph
 ")))))
 
-(ert-deftest test-org-gcal--update-existing-entry ()
+(ert-deftest org-gcal-test--update-existing-entry ()
   "Verify that an existing headline is populated correctly from a calendar event
 object."
-  (test-org-gcal--with-temp-buffer
+  (org-gcal-test--with-temp-buffer
       "\
 * Old event summary
 :PROPERTIES:
@@ -139,8 +139,8 @@ object."
 Old event description
 :END:
 "
-    (org-gcal--update-entry test-org-gcal-calendar-id
-                            test-org-gcal-event)
+    (org-gcal--update-entry org-gcal-test-calendar-id
+                            org-gcal-test-event)
     (org-back-to-heading)
     (let ((elem (org-element-at-point)))
       (should (equal (org-element-property :title elem)
@@ -169,10 +169,10 @@ My event description
 Second paragraph
 ")))))
 
-(ert-deftest test-org-gcal--update-existing-entry-scheduled ()
-  "Same as ‘test-org-gcal--update-existing-entry’, but with SCHEDULED
+(ert-deftest org-gcal-test--update-existing-entry-scheduled ()
+  "Same as ‘org-gcal-test--update-existing-entry’, but with SCHEDULED
 property."
-  (test-org-gcal--with-temp-buffer
+  (org-gcal-test--with-temp-buffer
       "\
 * Old event summary
 SCHEDULED: <9999-10-06 Sun 17:00-21:00>
@@ -186,8 +186,8 @@ SCHEDULED: <9999-10-06 Sun 17:00-21:00>
 Old event description
 :END:
 "
-    (org-gcal--update-entry test-org-gcal-calendar-id
-                            test-org-gcal-event)
+    (org-gcal--update-entry org-gcal-test-calendar-id
+                            org-gcal-test-event)
     (org-back-to-heading)
     (let ((elem (org-element-at-point)))
       (should (equal (org-element-property
@@ -218,9 +218,9 @@ My event description
 Second paragraph
 ")))))
 
-(ert-deftest test-org-gcal--post-at-point-basic ()
+(ert-deftest org-gcal-test--post-at-point-basic ()
   "Verify basic case of ‘org-gcal-post-to-point’."
-  (test-org-gcal--with-temp-buffer
+  (org-gcal-test--with-temp-buffer
       "\
 * My event summary
 :PROPERTIES:
@@ -247,10 +247,10 @@ Second paragraph
                                   * * *))
       (org-gcal-post-at-point))))
 
-(ert-deftest test-org-gcal--post-at-point-time-date-range ()
+(ert-deftest org-gcal-test--post-at-point-time-date-range ()
   "Verify that entry with a time/date range for its timestamp is parsed by
 ‘org-gcal-post-to-point’ (see https://orgmode.org/manual/Timestamps.html)."
-  (test-org-gcal--with-temp-buffer
+  (org-gcal-test--with-temp-buffer
       "\
 * My event summary
 SCHEDULED: <2019-10-06 Sun 17:00>--<2019-10-07 Mon 21:00>
@@ -276,7 +276,7 @@ Second paragraph
                                   * * *))
       (org-gcal-post-at-point))))
 
-(ert-deftest test-org-gcal--ert-fail ()
+(ert-deftest org-gcal-test--ert-fail ()
   "Test handling of ERT failures in deferred code. Should fail."
   :expected-result :failed
   (with-mock
