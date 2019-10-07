@@ -276,6 +276,64 @@ Second paragraph
                                   * * *))
       (org-gcal-post-at-point))))
 
+(ert-deftest org-gcal-test--delete-at-point-delete-drawer ()
+  "Verify that the org-gcal drawer is deleted by ‘org-gcal-delete-at-point’ if
+and only if the event at the point is successfully deleted by the Google
+Calendar API.
+
+Expected failure when running in batch mode, for unknown reasons related to the
+deferred library. Appears to work in interactive move (i.e., running ‘ert’ in a
+running session of Emacs.)"
+  :expected-result :failed
+  (org-gcal-test--with-temp-buffer
+      "\
+* My event summary
+SCHEDULED: <2019-10-06 Sun 17:00>--<2019-10-07 Mon 21:00>
+:PROPERTIES:
+:ETag:     \"12344321\"
+:LOCATION: Foobar's desk
+:calendar-id: foo@foobar.com
+:ID:       foobar1234/foo@foobar.com
+:END:
+:org-gcal:
+My event description
+
+Second paragraph
+:END:
+"
+    ;; Don’t delete drawer if we don’t receive 200.
+    (with-mock
+      (let ((deferred:debug t))
+        (stub org-gcal--time-zone => '(0 "UTC"))
+        (stub y-or-n-p => t)
+        (stub request-deferred =>
+              (deferred:succeed
+                (make-request-response
+                 :status-code 500
+                 :error-thrown '(error . nil))))
+        (org-back-to-heading)
+        (deferred:sync!
+          (deferred:$
+            (org-gcal-delete-at-point)
+            (deferred:error it #'ignore)))
+        (org-back-to-heading)
+        (should (re-search-forward ":org-gcal:" nil 'noerror))))
+
+    ;; Delete drawer if we do receive 200.
+    (with-mock
+      (let ((deferred:debug t))
+        (stub org-gcal--time-zone => '(0 "UTC"))
+        (stub y-or-n-p => t)
+        (stub request-deferred =>
+              (deferred:succeed
+                (make-request-response
+                 :status-code 200)))
+        (org-back-to-heading)
+        (deferred:sync! (org-gcal-delete-at-point))
+        (org-back-to-heading)
+        (message "buffer: %s" (buffer-string))
+        (should-not (re-search-forward ":org-gcal:" nil 'noerror))))))
+
 (ert-deftest org-gcal-test--ert-fail ()
   "Test handling of ERT failures in deferred code. Should fail."
   :expected-result :failed
