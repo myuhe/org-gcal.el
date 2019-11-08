@@ -6,6 +6,15 @@
 
 Data will be UTF-8 encoded for sync.
 
+* Getting Started
+
+Follow the instructions at [[#Installation][Installation]], and then run ~org-gcal-fetch~ to
+download Google Calendar events into your Org-mode files using the Google
+Calendar API. Run ~org-gcal-fetch~ to retrieve new events and update events
+already retrieved, and run ~org-gcal-post-at-point~ on an Org-mode headline
+corresponding to a downloaded event to push updates to the events on the Google
+Calendar API server.
+
 * Requirements
 
 - [[https://github.com/tkf/emacs-request][tkf/emacs-request]]
@@ -16,6 +25,10 @@ Data will be UTF-8 encoded for sync.
   management system.
 
 * Installation
+:PROPERTIES:
+:ID:       f5de2e1e-80a1-4ee3-8eeb-fd4db0794448
+:CUSTOM_ID:  Installation
+:END:
 
 1. Go to [[https://console.developers.google.com/project][Google Developers Console]]
 
@@ -87,22 +100,66 @@ This will use your existing Emacs installation to generate a value of
 run ~make clean~.
 
 * Usage
-** =org-gcal-sync=
-   Sync between Org and Gcal. before syncing,  execute =org-gcal-fetch= .
-** =org-gcal-fetch=
-   Fetch Google calendar events and populate =org-gcal-file-alist=
-   locations. The org files in =org-gcal-file-alist= should be blank
-   or all of their headlines should have timestamps.
-** =org-gcal-sync-buffer=
-   Sync entries in the current buffer with Google Calendar.
-** =org-gcal-fetch-buffer=
+** Event structure
+=org-gcal= modifies the following Org-mode properties and drawers when updating
+an event from the Google Calendar API:
+
+- Title :: contains the event summary (minus any TODO keywords or tags).
+- Timestamps:
+  - =SCHEDULED= :: if the =SCHEDULED= attribute of a headline is present,
+    =org-gcal= will maintain the start and end times of an event there rather
+    than in a timestamp in the =org-gcal= drawer (see below).
+- Properties:
+  - =calendar-id= (can be modified using the [[help:org-gcal-calendar-id-property][=org-gcal-calendar-id-property=]]
+    variable) :: contains the calendar ID of the calendar on which the event is
+    maintained.
+  - =ETag= (can be modified using the [[help:org-gcal-etag-property][=org-gcal-etag-property=]]
+    variable) :: contains the most recent ETag retrieved from the Google Calendar
+    API for the event (see [[https://developers.google.com/calendar/v3/version-resources#conditional_modification][the Google Calendar API documentation]]). Used to
+    support automatically updating the headline using the most recent event data
+    from the API if it has changed on the server since it was last retrieved.
+  - =ID= :: contains =<event_id>/<calendar_id>= of the event, as provided by the
+    Google Calendar API. Don't change the ID manually, or else the event won't be
+    able to retrieved or updated from the headline.
+- Drawers:
+  - =org-gcal= (can be modified using the [[help:org-gcal-drawer-name][=org-gcal-drawer-name=]] variable) ::
+    contains the event description. Unless the timestamp is maintained using
+    =SCHEDULED=, the initial line of this drawer contains the event start and
+    end time, with the event description starting in the next paragraph.
+
+Apart from these, all other attributes are preserved when an event is updated
+in any way.
+** Commands
+*** =org-gcal-fetch=
+   Fetch Google calendar events for all calendar IDs in =org-gcal-file-alist=
+   occurring between =org-gcal-up-days= before today and =org-gcal-down-days=
+   after today. If the events have already been retrieved and can be located
+   using their Org-mode headline IDs, update the event in place. Otherwise,
+   insert it at the end of the file corresponding to the event's calendar ID in
+   =org-gcal-file-alist=. Does not update events on the server.
+*** =org-gcal-sync=
+   Like =org-gcal-fetch=, but also update events on the server if they have
+   changed locally.
+*** =org-gcal-fetch-buffer=
    Fetch changes to Google calendar events to update entries in the current
    buffer, but don't update events on server.
-** =org-gcal-post-at-point=
-   Post/edit org block at point to Google calendar.
-** =org-gcal-delete-at-point=
-   Delete Gcal event at point.
-** =org-gcal-refresh-token=
+*** =org-gcal-sync-buffer=
+   Sync entries in the current buffer with Google Calendar.
+*** =org-gcal-post-at-point=
+   Update the event represented by the Org-mode headline at POINT on the server
+   using the Google Calendar API.
+
+   If the event has changed on the server since it was last retrieved (detected
+   using the =ETag= property), automatically update the headline using the
+   event data from the server instead of updating the event on the server.
+*** =org-gcal-delete-at-point=
+   Delete the event represented by the Org-mode headline at POINT on the server
+   using the Google Calendar API. This will not delete the Org-mode headline.
+
+   If the event has changed on the server since it was last retrieved (detected
+   using the =ETag= property), automatically update the headline using the
+   event data from the server instead of updating the event on the server.
+*** =org-gcal-refresh-token=
    Refresh the OAuth token. OAuth token expired in 3600 seconds, You
    should refresh token on a regular basis.
 
@@ -111,12 +168,21 @@ run ~make clean~.
 
 Modify =org-gcal-notify-p= from =t= to =nil=
 
-* Error
-** I get "Org-gcal error: Couldn't parse your-cal.org"
-   The org file where you sync the calendar must have all entries with
-   timestamps and a particular format to be parsed correctly. When
-   synching for the first time, we recommend is to use a blank file
-   and continue from that.
+* Errors
+** Duplicate ID
 
-* Similar application
+You get an error like this:
+
+#+BEGIN_EXAMPLE
+  Duplicate ID "FOO", also in file BAR
+#+END_EXAMPLE
+
+Most likely, this means some calendar events were mistakenly retrieved twice
+(for example, if you ran =org-gcal-fetch= on different computers). Search your
+Org-mode files for the duplicate ID "FOO" and delete one of the headlines with
+duplicate IDs (or just change the =ID= property on one of the events to
+something else).
+
+
+* Similar applications
   [[https://github.com/dengste/org-caldav][dengste/org-caldav]]
