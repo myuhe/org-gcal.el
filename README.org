@@ -16,7 +16,7 @@ corresponding to a downloaded event to push updates to the events on the Google
 Calendar API server.
 
 *First time setup:* on the initial run, in order to obtain the initial OAuth
-authorization, Org-Gcal will open a link in the browser to obtain authorization
+authorization, `org-gcal` will open a link in the browser to obtain authorization
 for the OAuth credentials generated in [[#Installation][Installation]]. You will probably see a
 screen that says "This app isn't verify". You will need to click on the
 "Advanced" link to authorize the application:
