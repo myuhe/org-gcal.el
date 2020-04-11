@@ -478,8 +478,8 @@ canonical ID, so that existing links won’t be broken."
                string-start
                (submatch-n 1
                            (1+ (not (any ?/ ?\n))))
-               (? ?/
-                  (submatch-n 2 (1+ (not (any ?/ ?\n)))))
+               ?/
+               (submatch-n 2 (1+ (not (any ?/ ?\n))))
                string-end))
             entry-id))
     (match-string 1 entry-id)))
@@ -487,12 +487,6 @@ canonical ID, so that existing links won’t be broken."
 (defun org-gcal--format-entry-id (calendar-id event-id)
   "Format CALENDAR-ID and ENTRY-ID into a canonical ID for an Org mode entry."
   (format "%s/%s" event-id calendar-id))
-
-(defun org-gcal--property-from-name (name)
-  "\
-Converts property names (as strings) to a symbol suitable for use as the
-PROPERTY argument to ‘org-element-property’."
-  (intern (concat ":" (upcase name))))
 
 (defun org-gcal--back-to-heading ()
   "\
@@ -524,17 +518,13 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
            (skip-export skip-export)
            (marker (point-marker))
            (elem (org-element-headline-parser (point-max) t))
-           (smry (org-element-property :title elem))
-           (loc (org-element-property :LOCATION elem))
+           (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
+           (loc (org-entry-get (point) "LOCATION"))
            (event-id (org-gcal--event-id-from-entry-id
-                      (org-element-property :ID elem)))
-           (etag (org-element-property
-                  (org-gcal--property-from-name org-gcal-etag-property)
-                  elem))
+                      (org-entry-get (point) "ID")))
+           (etag (org-entry-get (point) org-gcal-etag-property))
            (calendar-id
-            (org-element-property
-             (org-gcal--property-from-name org-gcal-calendar-id-property)
-             elem))
+            (org-entry-get (point) org-gcal-calendar-id-property))
            (tobj) (start) (end) (desc))
       ;; Parse :org-gcal: drawer for event time and description.
       (goto-char (marker-position marker))
@@ -608,17 +598,12 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
     (end-of-line)
     (org-gcal--back-to-heading)
     (let* ((marker (point-marker))
-           (elem (org-element-headline-parser (point-max) t))
-           (smry (org-element-property :title elem))
-           (calendar-id
-            (org-element-property
-             (org-gcal--property-from-name org-gcal-calendar-id-property)
-             elem))
-           (etag (org-element-property
-                  (org-gcal--property-from-name org-gcal-etag-property)
-                  elem))
+           (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
            (event-id (org-gcal--event-id-from-entry-id
-                      (org-element-property :ID elem))))
+                      (org-entry-get (point) "ID")))
+           (etag (org-entry-get (point) org-gcal-etag-property))
+           (calendar-id
+            (org-entry-get (point) org-gcal-calendar-id-property)))
       (if (and event-id
                (y-or-n-p (format "Do you really want to delete event?\n\n%s\n\n" smry)))
           (deferred:$
@@ -724,6 +709,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
 
 ;; Internal
 (defun org-gcal--archive-old-event ()
+  "Archive old event at point."
   (save-excursion
     (goto-char (point-min))
     (while (re-search-forward org-heading-regexp nil t)
