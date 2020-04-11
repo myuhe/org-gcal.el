@@ -159,9 +159,12 @@ in any way.
    If the event has changed on the server since it was last retrieved (detected
    using the =ETag= property), automatically update the headline using the
    event data from the server instead of updating the event on the server.
-*** =org-gcal-refresh-token=
-   Refresh the OAuth token. OAuth token expired in 3600 seconds, You
-   should refresh token on a regular basis.
+*** =org-gcal-request-token=
+   Request new OAuth access and refresh tokens. You should not need to call
+   this function in normal use, since it is called automatically on the first
+   run. However, you can call it again if for some reason the tokens stop
+   working. This should be rare - =org-gcal= will automatically refresh the
+   OAuth access token when it expires (every 3600 seconds).
 
 * Other features
 ** Minimize alerts

@@ -653,7 +653,10 @@ It returns the code provided by the service."
   (read-string "Enter the code your browser displayed: "))
 
 (defun org-gcal-request-token ()
-  "Refresh OAuth access at TOKEN-URL."
+  "Refresh OAuth access at TOKEN-URL.
+
+Returns a ‘deferred’ object that can be used to wait for completion."
+  (interactive)
   (deferred:$
     (request-deferred
      org-gcal-token-url
