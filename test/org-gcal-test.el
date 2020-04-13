@@ -239,6 +239,7 @@ Second paragraph
 "
     (with-mock
       (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-gcal-request-token => (deferred:succeed nil))
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                   "My event summary" "Foobar's desk"
                                   "My event description\n\nSecond paragraph"
@@ -268,6 +269,7 @@ Second paragraph
 "
     (with-mock
       (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-gcal-request-token => (deferred:succeed nil))
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-07T21:00:00Z"
                                   "My event summary" "Foobar's desk"
                                   "My event description\n\nSecond paragraph"
@@ -299,7 +301,8 @@ Second paragraph
     ;; Don’t delete drawer if we don’t receive 200.
     (with-mock
       (let ((deferred:debug t))
-        (stub org-gcal--time-zone => '(0 "UTC"))
+        (stub org-gcal--time-zone => '(0 "UTC")))
+      (stub org-gcal-request-token => (deferred:succeed nil)
         (stub y-or-n-p => t)
         (stub alert => t)
         (stub request-deferred =>
@@ -319,6 +322,7 @@ Second paragraph
     (with-mock
       (let ((deferred:debug t))
         (stub org-gcal--time-zone => '(0 "UTC"))
+        (stub org-gcal-request-token => (deferred:succeed nil))
         (stub y-or-n-p => t)
         (stub request-deferred =>
               (deferred:succeed
