@@ -452,7 +452,9 @@ canonical ID, so that existing links won’t be broken."
       ;; it as the first ID in the entry.
       (org-entry-delete (point) "ID")
       (org-entry-put (point) "ID" entry-id)
-      (org-id-add-location entry-id (buffer-file-name (buffer-base-buffer)))
+      (let ((bfn (buffer-file-name (buffer-base-buffer))))
+        (when bfn
+          (org-id-add-location entry-id bfn)))
       ;; Now find the ID just inserted and insert the other IDs in their
       ;; original order.
       (let* ((range (org-get-property-block)))
