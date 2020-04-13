@@ -36,9 +36,10 @@
 (require 'alert)
 (require 'json)
 (require 'request-deferred)
+(require 'org)
+(require 'org-archive)
 (require 'org-element)
 (require 'org-id)
-(require 'org-archive)
 (require 'cl-lib)
 (require 'rx)
 
