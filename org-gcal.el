@@ -86,6 +86,8 @@
   :group 'org-gcal
   :type 'string)
 
+(defvaralias 'org-gcal-file-alist 'org-gcal-fetch-file-alist)
+
 (defcustom org-gcal-fetch-file-alist nil
   "\
 Association list '(calendar-id file). For each calendar-id,‘org-gcal-fetch’
@@ -93,8 +95,6 @@ and ‘org-gcal-sync’ will retrieve new events on the calendar and insert
 them into the file."
   :group 'org-gcal
   :type '(alist :key-type (string :tag "Calendar Id") :value-type (file :tag "Org file")))
-
-(defvaralias 'org-gcal-file-alist 'org-gcal-fetch-file-alist)
 
 (defcustom org-gcal-logo-file nil
   "Org-gcal logo image filename to display in notifications."
