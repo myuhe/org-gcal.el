@@ -1,29 +1,27 @@
-EMACS ?= $(shell which emacs)
+EMACS ?= emacs
 SRC=org-gcal.el
-TEST=org-gcal-test.el
-LOAD_PATH=.load-path.el
+TEST=test/org-gcal-test.el
+BUILD_LOG = build.log
+CASK ?= cask
+PKG_DIR := $(shell $(CASK) package-directory)
 ELCFILES = $(SRC:.el=.elc)
 .DEFAULT_GOAL := all
 
-.PHONY: all clean load-path test-compile test
+.PHONY: all clean load-path compile test elpa
 
-all: test-compile test
+all: compile test
 
 clean:
-	rm -f $(ELCFILES) $(LOAD_PATH)
+	rm -f $(ELCFILES) $(BUILD_LOG); rm -rf $(PKG_DIR)
 
-test-compile:
-	! ( $(EMACS) -Q --batch -l package --eval "(setq byte-compile-error-on-warn t)" \
-	      --eval "(package-initialize)" -f batch-byte-compile $(SRC) 2>&1 \
-	      | egrep -a "(Warning|Error):" )
-	rm -f $(ELCFILES)
+elpa: $(PKG_DIR)
+$(PKG_DIR): Cask
+	$(CASK) install
+	touch $@
 
-test: $(SRC) $(TEST) $(LOAD_PATH)
-	$(EMACS) -Q --batch -l $(LOAD_PATH) -l ert -l $(TEST) -l package \
-	      --eval "(package-initialize)" -f ert-run-tests-batch-and-exit
+compile: $(SRC) elpa
+	$(CASK) build 2>&1 | tee $(BUILD_LOG); \
+	! ( grep -E -e ':(Warning|Error):' $(BUILD_LOG) )
 
-load-path: $(LOAD_PATH)
-
-$(LOAD_PATH):
-	$(EMACS) --batch --eval "(package-initialize)" \
-	         --eval "(pp \`(setq load-path (list ,@load-path)))" > $(LOAD_PATH)
+test: $(SRC) $(TEST) elpa
+	$(CASK) exec ert-runner -L . -L test/

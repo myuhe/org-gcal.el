@@ -1,2 +1,4 @@
 *.elc
 .load-path.el
+.cask
+build.log
