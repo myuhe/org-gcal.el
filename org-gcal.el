@@ -1079,8 +1079,12 @@ Returns a ‘deferred’ object that can be used to wait for completion."
          :type (if event-id "PATCH" "POST")
          :headers (append
                    '(("Content-Type" . "application/json"))
-                   (if (null etag) nil
-                     `(("If-Match" . ,etag))))
+                   (cond
+                    ((null etag) nil)
+                    ((null event-id)
+                     (error "Event cannot have ETag set when event ID absent"))
+                    (t
+                     `(("If-Match" . ,etag)))))
          :data (encode-coding-string
                 (json-encode `(("start" (,stime . ,start) (,stime-alt . nil))
                                ("end" (,etime . ,(if (equal "date" etime)
@@ -1187,8 +1191,12 @@ Returns a ‘deferred’ object that can be used to wait for completion."
          :type "DELETE"
          :headers (append
                    '(("Content-Type" . "application/json"))
-                   (if (null etag) nil
-                     `(("If-Match" . ,etag))))
+                   (cond
+                    ((null etag) nil)
+                    ((null event-id)
+                     (error "Event cannot have ETag set when event ID absent"))
+                    (t
+                     `(("If-Match" . ,etag)))))
          :params `(("access_token" . ,a-token)
                    ("key" . ,org-gcal-client-secret)
                    ("grant_type" . "authorization_code"))
