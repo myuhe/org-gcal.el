@@ -27,18 +27,15 @@ screen that says "This app isn't verify". You will need to click on the
 
 - [[https://github.com/tkf/emacs-request][tkf/emacs-request]]
 - [[https://github.com/jwiegley/alert][jwiegley/alert]]
-- [https://elpa.gnu.org/packages/persist.html][~persist~]
+- [[https://elpa.gnu.org/packages/persist.html][~persist~]]
 
-  =org-gcal= is now available in the famous emacs package repo [[http://melpa.milkbox.net/][MELPA]],
-  so the recommended way is to install it through Emacs package
-  management system.
+  =org-gcal= is now available in the famous emacs package repo [[http://melpa.milkbox.net/][MELPA]], so the
+  recommended way is to install it through Emacs package management system.
 
   NOTE: ~persist~ lives in GNU ELPA. If you're running Emacs 26.x with x < 3,
-  you may need to add
-  ~(setq gnutls-algorithm-priority "NORMAL:-VERS-TLS1.3")~ to your ~init.el~
-  to work around Emacs bug https://debbugs.gnu.org/34341
-  ([https://www.reddit.com/r/emacs/comments/cdei4p/failed_to_download_gnu_archive_bad_request/][more
-  info]).
+  you may need to add ~(setq gnutls-algorithm-priority "NORMAL:-VERS-TLS1.3")~
+  to your ~init.el~ to work around Emacs bug https://debbugs.gnu.org/34341
+  ([[https://www.reddit.com/r/emacs/comments/cdei4p/failed_to_download_gnu_archive_bad_request/][more info]]).
 
 * Installation
 :PROPERTIES:
