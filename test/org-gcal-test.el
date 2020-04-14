@@ -353,6 +353,32 @@ Second paragraph
                                   * * *))
       (org-gcal-post-at-point))))
 
+(ert-deftest org-gcal-test--post-at-point-etag-no-id ()
+  "Verify that ‘org-gcal-post-to-point’ fails if an ETag is present but
+an event ID is not."
+  :expected-result :failed
+  (org-gcal-test--with-temp-buffer
+      "\
+* My event summary
+:PROPERTIES:
+:LOCATION: Foobar's desk
+:ETag:     \"12344321\"
+:calendar-id: foo@foobar.com
+:END:
+:org-gcal:
+<2019-10-06 Sun 17:00-21:00>
+
+My event description
+
+Second paragraph
+:END:
+"
+    (with-mock
+      (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-gcal-request-token => (deferred:succeed nil))
+      (stub request-deferred => (deferred:succeed nil))
+      (org-gcal-post-at-point))))
+
 (ert-deftest org-gcal-test--post-at-point-time-date-range ()
   "Verify that entry with a time/date range for its timestamp is parsed by
 ‘org-gcal-post-to-point’ (see https://orgmode.org/manual/Timestamps.html)."
