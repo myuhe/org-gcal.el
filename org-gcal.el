@@ -5,7 +5,7 @@
 ;; Version: 0.3
 ;; Maintainer: Raimon Grau <raimonster@gmail.com>
 ;; Copyright (C) :2014 myuhe all rights reserved.
-;; Package-Requires: ((request "20190901") (request-deferred "20181129") (alert) (emacs "26"))
+;; Package-Requires: ((request "20190901") (request-deferred "20181129") (alert) (persist) (emacs "26"))
 ;; Keywords: convenience,
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -40,6 +40,7 @@
 (require 'org-archive)
 (require 'org-element)
 (require 'org-id)
+(require 'persist)
 (require 'cl-lib)
 (require 'rx)
 
@@ -147,6 +148,14 @@ entries."
 
 (defconst org-gcal-events-url "https://www.googleapis.com/calendar/v3/calendars/%s/events")
 
+(persist-defvar
+ org-gcal--sync-tokens (make-hash-table)
+ "Storage for Calendar API sync tokens, used for performing incremental sync.
+
+This is a a hash table mapping calendar IDs (as given in
+‘org-gcal-fetch-file-alist’) to its sync token. Persisted between sessions of
+Emacs. To clear sync tokens, call ‘org-gcal-sync-tokens-clear’.")
+
 (cl-defstruct (org-gcal--event-entry
                (:constructor org-gcal--event-entry-create))
   ;; Entry ID. Created by ‘org-gcal--format-entry-id’.
@@ -190,10 +199,13 @@ requests produces a large number of events."
             `(("access_token" . ,a-token)
               ("key" . ,org-gcal-client-secret)
               ("singleEvents" . "True")
-              ("orderBy" . "startTime")
-              ("timeMin" . ,(org-gcal--subtract-time))
-              ("timeMax" . ,(org-gcal--add-time))
               ("grant_type" . "authorization_code"))
+            (pcase (gethash calendar-id org-gcal--sync-tokens)
+              ((and (pred stringp) sync-token)
+               `(("syncToken" . ,sync-token)))
+              (_
+               `(("timeMin" . ,(org-gcal--subtract-time))
+                 ("timeMax" . ,(org-gcal--add-time)))))
             (when page-token
               `(("pageToken" . ,page-token))))
            :parser 'org-gcal--json-read)
@@ -225,6 +237,11 @@ requests produces a large number of events."
                   (org-gcal--notify "Received HTTP 403"
                                     "Ensure you enabled the Calendar API through the Developers Console, then try again.")
                   (error "Got error %S: %S" status-code error-thrown))
+                 ((eq 410 status-code)
+                  (org-gcal--notify "Received HTTP 410"
+                                    "Calendar API sync token expired - performing full sync.")
+                  (remhash calendar-id org-gcal--sync-tokens)
+                  (org-gcal-sync a-token skip-export silent page-token))
                  ;; We got some 2xx response, but for some reason no
                  ;; message body.
                  ((and (> 299 status-code) (eq data nil))
@@ -244,6 +261,10 @@ requests produces a large number of events."
                  ;; further processing.
                  (t
                   (setq page-token (plist-get data :nextPageToken))
+                  (let ((next-sync-token (plist-get data :nextSyncToken)))
+                    (when next-sync-token
+                      (puthash calendar-id next-sync-token
+                               org-gcal--sync-tokens)))
                   (org-gcal--filter (plist-get data :items)))))))
           ;; Iterate over all events. For previously unretrieved events, add
           ;; them to the bottom of the file. For retrieved events, just collect
@@ -723,6 +744,15 @@ Returns a ‘deferred’ object that can be used to wait for completion."
               (deferred:succeed nil)))
            (t
             (error "Got error %S: %S" status-code error-thrown))))))))
+
+;;;###autoload
+(defun org-gcal-sync-tokens-clear ()
+  "Clear all Calendar API sync tokens.
+
+Use this to force retrieving all events in ‘org-gcal-sync’ or
+‘org-gcal-fetch’."
+  (interactive)
+  (clrhash org-gcal--sync-tokens))
 
 ;; Internal
 (defun org-gcal--archive-old-event ()
