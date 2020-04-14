@@ -157,10 +157,12 @@ entries."
   event)
 
 ;;;###autoload
-(defun org-gcal-sync (&optional a-token skip-export silent)
+(defun org-gcal-sync (&optional a-token skip-export silent page-token)
   "Import events from calendars.
 Using A-TOKEN and export the ones to the calendar if unless
-SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
+SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications.
+PAGE-TOKEN is used internally to retrieve all events if the import
+requests produces a large number of events."
   (interactive)
   (org-gcal--ensure-token)
   (when org-gcal-auto-archive
@@ -177,18 +179,23 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                         (org-gcal--get-access-token)))
 
              (skip-export skip-export)
-             (silent silent))
+             (silent silent)
+             (page-token page-token))
         (deferred:$
           (request-deferred
            (format org-gcal-events-url calendar-id)
            :type "GET"
-           :params `(("access_token" . ,a-token)
-                     ("key" . ,org-gcal-client-secret)
-                     ("singleEvents" . "True")
-                     ("orderBy" . "startTime")
-                     ("timeMin" . ,(org-gcal--subtract-time))
-                     ("timeMax" . ,(org-gcal--add-time))
-                     ("grant_type" . "authorization_code"))
+           :params
+           (append
+            `(("access_token" . ,a-token)
+              ("key" . ,org-gcal-client-secret)
+              ("singleEvents" . "True")
+              ("orderBy" . "startTime")
+              ("timeMin" . ,(org-gcal--subtract-time))
+              ("timeMax" . ,(org-gcal--add-time))
+              ("grant_type" . "authorization_code"))
+            (when page-token
+              `(("pageToken" . ,page-token))))
            :parser 'org-gcal--json-read)
           (deferred:nextc it
             (lambda (response)
@@ -213,7 +220,7 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                     (org-gcal--refresh-token)
                     (deferred:nextc it
                       (lambda (a-token)
-                        (org-gcal-sync a-token skip-export silent)))))
+                        (org-gcal-sync a-token skip-export silent page-token)))))
                  ((eq 403 status-code)
                   (org-gcal--notify "Received HTTP 403"
                                     "Ensure you enabled the Calendar API through the Developers Console, then try again.")
@@ -236,6 +243,7 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                  ;; Fetch was successful. Return the list of events retrieved for
                  ;; further processing.
                  (t
+                  (setq page-token (plist-get data :nextPageToken))
                   (org-gcal--filter (plist-get data :items)))))))
           ;; Iterate over all events. For previously unretrieved events, add
           ;; them to the bottom of the file. For retrieved events, just collect
@@ -288,6 +296,12 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                     (deferred:error it
                       (lambda (err)
                         (message "org-gcal-sync: error: %s" err))))))))
+          ;; Retrieve the next page of results if needed.
+          (deferred:nextc it
+            (lambda (_)
+              (if page-token
+                  (org-gcal-sync a-token skip-export silent page-token)
+                (deferred:succeed nil))))
           (deferred:nextc it
             (lambda (_)
               (unless silent
