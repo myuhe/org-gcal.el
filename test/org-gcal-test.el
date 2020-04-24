@@ -66,6 +66,10 @@
 }
 ")
 
+(defconst org-gcal-test-cancelled-event-json
+  (replace-regexp-in-string "confirmed" "cancelled"
+                            org-gcal-test-event-json))
+
 (defmacro org-gcal-test--with-temp-buffer (contents &rest body)
   "Create a ‘org-mode’ enabled temp buffer with CONTENTS.
 BODY is code to be executed within the temp buffer.  Point is
@@ -85,6 +89,9 @@ always located at the beginning of the buffer."
 
 (defconst org-gcal-test-event
   (org-gcal-test--json-read-string org-gcal-test-event-json))
+
+(defconst org-gcal-test-cancelled-event
+  (org-gcal-test--json-read-string org-gcal-test-cancelled-event-json))
 
 (ert-deftest org-gcal-test--update-empty-entry ()
   "Verify that an empty headline is populated correctly from a calendar event
@@ -168,6 +175,104 @@ My event description
 
 Second paragraph
 ")))))
+
+(ert-deftest org-gcal-test--update-existing-entry-cancelled ()
+  "Verify that an existing headline is populated correctly from a cancelled
+  calendar event object."
+  (let (
+        (org-todo-keywords '((sequence "TODO" "|" "DONE" "CANCELLED")))
+        (org-gcal-cancelled-todo-keyword "CANCELLED")
+        (org-gcal-remove-cancelled-events nil)
+        (buf "\
+* Old event summary
+:PROPERTIES:
+:ETag:     \"9999\"
+:LOCATION: Somewhere else
+:calendar-id: foo@foobar.com
+:ID:       foobar1234/foo@foobar.com
+:END:
+:org-gcal:
+<9999-10-06 Sun 17:00-21:00>
+
+Old event description
+:END:
+"))
+    (let ((org-gcal-update-cancelled-events-with-todo t))
+      (org-gcal-test--with-temp-buffer
+       buf
+       (org-gcal--update-entry org-gcal-test-calendar-id
+                               org-gcal-test-cancelled-event)
+       (org-back-to-heading)
+       (let ((elem (org-element-at-point)))
+         (should (equal (org-element-property :title elem)
+                        "My event summary"))
+         (should (equal (org-element-property :todo-keyword elem)
+                        "CANCELLED"))
+         (should (equal (org-element-property :ETAG elem)
+                        "\"12344321\""))
+         (should (equal (org-element-property :LOCATION elem)
+                        "Foobar's desk"))
+         (should (equal (org-element-property :CALENDAR-ID elem)
+                        "foo@foobar.com"))
+         (should (equal (org-element-property :ID elem)
+                        "foobar1234/foo@foobar.com")))
+       ;; Check contents of "org-gcal" drawer
+       (re-search-forward ":org-gcal:")
+       (let ((elem (org-element-at-point)))
+         (should (equal (org-element-property :drawer-name elem)
+                        "org-gcal"))
+         (should (equal (buffer-substring-no-properties
+                         (org-element-property :contents-begin elem)
+                         (org-element-property :contents-end elem))
+                        "\
+<2019-10-06 Sun 17:00-21:00>
+
+My event description
+
+Second paragraph
+")))))
+    (let ((org-gcal-update-cancelled-events-with-todo nil))
+      (org-gcal-test--with-temp-buffer
+       buf
+       (org-gcal--update-entry org-gcal-test-calendar-id
+                               org-gcal-test-cancelled-event)
+       (org-back-to-heading)
+       (let ((elem (org-element-at-point)))
+         (should (equal (org-element-property :title elem)
+                        "My event summary"))
+         (should (equal (org-element-property :todo-keyword elem)
+                        nil))
+         (should (equal (org-element-property :ETAG elem)
+                        "\"12344321\""))
+         (should (equal (org-element-property :LOCATION elem)
+                        "Foobar's desk"))
+         (should (equal (org-element-property :CALENDAR-ID elem)
+                        "foo@foobar.com"))
+         (should (equal (org-element-property :ID elem)
+                        "foobar1234/foo@foobar.com")))
+       ;; Check contents of "org-gcal" drawer
+       (re-search-forward ":org-gcal:")
+       (let ((elem (org-element-at-point)))
+         (should (equal (org-element-property :drawer-name elem)
+                        "org-gcal"))
+         (should (equal (buffer-substring-no-properties
+                         (org-element-property :contents-begin elem)
+                         (org-element-property :contents-end elem))
+                        "\
+<2019-10-06 Sun 17:00-21:00>
+
+My event description
+
+Second paragraph
+")))))
+    (let ((org-gcal-remove-cancelled-events t))
+      (org-gcal-test--with-temp-buffer
+       buf
+       (org-gcal--update-entry org-gcal-test-calendar-id
+                               org-gcal-test-cancelled-event)
+       (should (equal (buffer-substring-no-properties
+                       (point-min) (point-max))
+                      ""))))))
 
 (ert-deftest org-gcal-test--update-existing-entry-scheduled ()
   "Same as ‘org-gcal-test--update-existing-entry’, but with SCHEDULED
@@ -413,8 +518,9 @@ Second paragraph
   "Verify that the org-gcal drawer is deleted by ‘org-gcal-delete-at-point’ if
 and only if the event at the point is successfully deleted by the Google
 Calendar API."
-  (org-gcal-test--with-temp-buffer
-      "\
+  (let ((org-gcal-remove-cancelled-events nil)
+        (org-gcal-update-cancelled-events-with-todo nil)
+        (buf "\
 * My event summary
 SCHEDULED: <2019-10-06 Sun 17:00>--<2019-10-07 Mon 21:00>
 :PROPERTIES:
@@ -428,29 +534,31 @@ My event description
 
 Second paragraph
 :END:
-"
-    ;; Don’t delete drawer if we don’t receive 200.
-    (with-mock
+"))
+    (org-gcal-test--with-temp-buffer
+     buf
+     ;; Don’t delete drawer if we don’t receive 200.
+     (with-mock
       (let ((deferred:debug t))
         (stub org-gcal--time-zone => '(0 "UTC")))
       (stub org-gcal-request-token => (deferred:succeed nil)
-        (stub y-or-n-p => t)
-        (stub alert => t)
-        (stub request-deferred =>
-              (deferred:succeed
-                (make-request-response
-                 :status-code 500
-                 :error-thrown '(error . nil))))
-        (org-back-to-heading)
-        (deferred:sync!
-          (deferred:$
-            (org-gcal-delete-at-point)
-            (deferred:error it #'ignore)))
-        (org-back-to-heading)
-        (should (re-search-forward ":org-gcal:" nil 'noerror))))
+            (stub y-or-n-p => t)
+            (stub alert => t)
+            (stub request-deferred =>
+                  (deferred:succeed
+                    (make-request-response
+                     :status-code 500
+                     :error-thrown '(error . nil))))
+            (org-back-to-heading)
+            (deferred:sync!
+              (deferred:$
+                (org-gcal-delete-at-point)
+                (deferred:error it #'ignore)))
+            (org-back-to-heading)
+            (should (re-search-forward ":org-gcal:" nil 'noerror))))
 
-    ;; Delete drawer if we do receive 200.
-    (with-mock
+     ;; Delete drawer if we do receive 200.
+     (with-mock
       (let ((deferred:debug t))
         (stub org-gcal--time-zone => '(0 "UTC"))
         (stub org-gcal-request-token => (deferred:succeed nil))
@@ -462,8 +570,22 @@ Second paragraph
         (org-back-to-heading)
         (deferred:sync! (org-gcal-delete-at-point))
         (org-back-to-heading)
-        (message "buffer: %s" (buffer-string))
-        (should-not (re-search-forward ":org-gcal:" nil 'noerror))))))
+        (should-not (re-search-forward ":org-gcal:" nil 'noerror))))
+
+     ;; Delete the entire entry if configured to
+     (with-mock
+      (let ((deferred:debug t)
+            (org-gcal-remove-cancelled-events t))
+        (stub org-gcal--time-zone => '(0 "UTC"))
+        (stub org-gcal-request-token => (deferred:succeed nil))
+        (stub y-or-n-p => t)
+        (stub request-deferred =>
+              (deferred:succeed
+                (make-request-response
+                 :status-code 200)))
+        (org-back-to-heading)
+        (deferred:sync! (org-gcal-delete-at-point))
+        (should (equal (buffer-string) "")))))))
 
 (ert-deftest org-gcal-test--ert-fail ()
   "Test handling of ERT failures in deferred code. Should fail."

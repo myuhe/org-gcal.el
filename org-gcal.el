@@ -115,6 +115,28 @@ Predicate functions take an event, and if they return nil the
   :group 'org-gcal
   :type 'boolean)
 
+(defcustom org-gcal-update-cancelled-events-with-todo t
+  "If ‘t’, mark cancelled events with the TODO keyword in
+‘org-gcal-cancelled-todo-keyword’."
+  :group 'org-gcal
+  :type 'boolean)
+
+(defcustom org-gcal-cancelled-todo-keyword "CANCELLED"
+  "TODO keyword to use for cancelled events."
+  :group 'org-gcal
+  :type 'string)
+
+(defcustom org-gcal-remove-cancelled-events 'ask
+  "Whether to remove Org-mode headlines for events cancelled in Google Calendar.
+
+The events will always be marked cancelled before they’re removed if
+‘org-gcal-update-cancelled-events-with-todo’ is true."
+  :group 'org-gcal
+  :type '(choice
+          (const :tag "Never remove" nil)
+          (const :tag "Prompt whether to remove" 'ask)
+          (const :tag "Always remove without prompting" t)))
+
 (defcustom org-gcal-calendar-id-property "calendar-id"
   "\
 Org-mode property on org-gcal entries that records the Calendar ID."
@@ -650,10 +672,8 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
             ;; the ID for links, but will ensure functions in this module don’t
             ;; identify the entry as a Calendar event.
             (deferred:nextc it
-              (lambda (res)
-                (message "about to find drawer: %S" res)
+              (lambda (_unused)
                 (org-with-point-at marker
-                  (set-marker marker nil)
                   (when (re-search-forward
                          (format
                           "^[ \t]*:%s:[^z-a]*?\n[ \t]*:END:[ \t]*\n?"
@@ -661,6 +681,13 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
                          (save-excursion (outline-next-heading) (point))
                          'noerror)
                     (replace-match "" 'fixedcase))
+                  (deferred:succeed nil))))
+            ;; Finally cancel and delete the event if this is configured.
+            (deferred:nextc it
+              (lambda (_unused)
+                (org-with-point-at marker
+                  (org-back-to-heading)
+                  (org-gcal--handle-cancelled-entry)
                   (deferred:succeed nil)))))
         (deferred:succeed nil)))))
 
@@ -924,6 +951,10 @@ TO.  Instead an empty string is returned."
 (defun org-gcal--iso-previous-day (str)
   (org-gcal--iso-next-day str t))
 
+(defun org-gcal--event-cancelled-p (event)
+  "Has EVENT been cancelled?"
+  (string= (plist-get event :status) "cancelled"))
+
 (defun org-gcal--update-entry (calendar-id event)
   "\
 Update the entry at the current heading with information from EVENT, which is
@@ -977,10 +1008,10 @@ an error will be thrown. Point is not preserved."
              'noerror)
         (replace-match "" 'fixedcase)))
     (unless (re-search-forward ":PROPERTIES:[^z-a]*?:END:"
-                       (save-excursion (outline-next-heading) (point))
-                       'noerror)
-        (message "PROPERTIES not found: %s (%s) %d"
-                 (buffer-name) (buffer-file-name) (point)))
+                               (save-excursion (outline-next-heading) (point))
+                               'noerror)
+      (message "PROPERTIES not found: %s (%s) %d"
+               (buffer-name) (buffer-file-name) (point)))
     (end-of-line)
     (newline)
     (insert (format ":%s:" org-gcal-drawer-name))
@@ -1014,7 +1045,38 @@ an error will be thrown. Point is not preserved."
     (when desc
       (insert (replace-regexp-in-string "^\*" "✱" desc))
       (insert (if (string= "\n" (org-gcal--safe-substring desc -1)) "" "\n")))
-    (insert ":END:")))
+    (insert ":END:")
+    (when (org-gcal--event-cancelled-p event)
+      (save-excursion
+        (org-back-to-heading t)
+        (org-gcal--handle-cancelled-entry)))))
+
+(defun org-gcal--handle-cancelled-entry ()
+  "Perform actions to be done on cancelled entries."
+  (unless (org-at-heading-p)
+    (user-error "Must be on Org-mode heading"))
+  (when (and org-gcal-update-cancelled-events-with-todo
+             (member org-gcal-cancelled-todo-keyword
+                     org-todo-keywords-1))
+    (let ((org-inhibit-logging t))
+      (org-todo org-gcal-cancelled-todo-keyword)))
+  (org-gcal--maybe-remove-entry))
+
+(defun org-gcal--maybe-remove-entry ()
+  "Remove the entry at the current heading, depending on the value of \
+‘org-gcal-remove-cancelled-events’."
+  (when-let ((org-gcal-remove-cancelled-events)
+             (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
+             ((or (eq org-gcal-remove-cancelled-events t)
+                  (y-or-n-p (format "Delete Org headline for cancelled event\n%s? "
+                                    (or smry ""))))))
+    (delete-region
+     (save-excursion
+       (org-back-to-heading t)
+       (point))
+     (save-excursion
+       (org-end-of-subtree t t)
+       (point)))))
 
 (defun org-gcal--format-date (str format &optional tz)
   (let* ((plst (org-gcal--parse-date str))
