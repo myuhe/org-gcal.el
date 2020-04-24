@@ -115,6 +115,17 @@ Predicate functions take an event, and if they return nil the
   :group 'org-gcal
   :type 'boolean)
 
+(defcustom org-gcal-update-cancelled-events-with-todo t
+  "If ‘t’, mark cancelled events with the TODO keyword in
+‘org-gcal-cancelled-todo-keyword’."
+  :group 'org-gcal
+  :type 'boolean)
+
+(defcustom org-gcal-cancelled-todo-keyword "CANCELLED"
+  "TODO keyword to use for cancelled events."
+  :group 'org-gcal
+  :type 'string)
+
 (defcustom org-gcal-calendar-id-property "calendar-id"
   "\
 Org-mode property on org-gcal entries that records the Calendar ID."
@@ -924,6 +935,10 @@ TO.  Instead an empty string is returned."
 (defun org-gcal--iso-previous-day (str)
   (org-gcal--iso-next-day str t))
 
+(defun org-gcal--event-cancelled-p (event)
+  "Has EVENT been cancelled?"
+  (string= (plist-get event :status) "cancelled"))
+
 (defun org-gcal--update-entry (calendar-id event)
   "\
 Update the entry at the current heading with information from EVENT, which is
@@ -934,6 +949,7 @@ an error will be thrown. Point is not preserved."
     (user-error "Must be on Org-mode heading."))
   (let* ((smry  (or (plist-get event :summary)
                     "busy"))
+         (cancelled (org-gcal--event-cancelled-p event))
          (desc  (plist-get event :description))
          (loc   (plist-get event :location))
          (_link  (plist-get event :htmlLink))
@@ -953,6 +969,10 @@ an error will be thrown. Point is not preserved."
          (elem))
     (when loc (replace-regexp-in-string "\n" ", " loc))
     (org-edit-headline smry)
+    (when (and cancelled
+               org-gcal-update-cancelled-events-with-todo)
+      (let ((org-inhibit-logging t))
+        (org-todo org-gcal-cancelled-todo-keyword)))
     (org-entry-put (point) org-gcal-etag-property etag)
     (when loc (org-entry-put (point) "LOCATION" loc))
     (when meet
