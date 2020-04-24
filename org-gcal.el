@@ -809,20 +809,26 @@ Use this to force retrieving all events in ‘org-gcal-sync’ or
     (save-buffer)))
 
 (defun org-gcal--save-sexp (data file)
-  (if (file-directory-p org-gcal-dir)
-      (if (file-exists-p file)
-          (if  (plist-get (read (buffer-string)) :token)
-              (with-temp-file file
-                (pp (plist-put (read (buffer-string)) :token data) (current-buffer)))
-            (with-temp-file file
-              (pp `(:token ,data :elem nil) (current-buffer))))
-        (progn
-          (find-file-noselect file)
-          (with-temp-file file
-            (pp `(:token ,data :elem nil) (current-buffer)))))
-    (progn
-      (make-directory org-gcal-dir)
-      (org-gcal--save-sexp data file))))
+  "Print Lisp object DATA to FILE, creating it if necessary."
+  (let ((dir (file-name-directory file)))
+    (unless (file-directory-p (file-name-directory file))
+      (make-directory dir)))
+  (let* ((content (when (file-exists-p file)
+                    (org-gcal--read-file-contents file))))
+    (if (and content (listp content) (plist-get content :token))
+        (setq content (plist-put content :token data))
+      (setq content `(:token ,data :elem nil)))
+    (with-temp-file file
+      (pp content (current-buffer)))))
+
+(defun org-gcal--read-file-contents (file)
+  "Call ‘read’ on the contents of FILE, returning the resulting object."
+  (with-temp-buffer
+    (insert-file-contents file)
+    (goto-char (point-min))
+    (condition-case nil
+      (read (current-buffer))
+      (end-of-file nil))))
 
 (defun org-gcal--json-read ()
   (let ((json-object-type 'plist))

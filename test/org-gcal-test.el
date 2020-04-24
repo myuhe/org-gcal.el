@@ -93,6 +93,25 @@ always located at the beginning of the buffer."
 (defconst org-gcal-test-cancelled-event
   (org-gcal-test--json-read-string org-gcal-test-cancelled-event-json))
 
+(ert-deftest org-gcal-test--save-sexp ()
+  "Verify that org-gcal--save-sexp saves its data to the right place."
+  (let* ((file (make-temp-file "org-gcal-test--save-sexp.")))
+    (unwind-protect
+        (org-gcal-test--with-temp-buffer
+         ""
+         (let ((data '(:foo :bar)))
+           (org-gcal--save-sexp data file)
+           (should (equal (buffer-string)
+                          ""))
+           (should (equal (org-gcal--read-file-contents file)
+                          `(:token ,data :elem nil)))
+           (setq data '(:baz :quux))
+           (org-gcal--save-sexp data file)
+           (should (equal (buffer-string)
+                          ""))
+           (should (equal (org-gcal--read-file-contents file)
+                          `(:token ,data :elem nil))))))))
+
 (ert-deftest org-gcal-test--update-empty-entry ()
   "Verify that an empty headline is populated correctly from a calendar event
 object."
