@@ -182,6 +182,7 @@ Second paragraph
   (let (
         (org-todo-keywords '((sequence "TODO" "|" "DONE" "CANCELLED")))
         (org-gcal-cancelled-todo-keyword "CANCELLED")
+        (org-gcal-remove-cancelled-events nil)
         (buf "\
 * Old event summary
 :PROPERTIES:
@@ -263,7 +264,15 @@ Second paragraph
 My event description
 
 Second paragraph
-")))))))
+")))))
+    (let ((org-gcal-remove-cancelled-events t))
+      (org-gcal-test--with-temp-buffer
+       buf
+       (org-gcal--update-entry org-gcal-test-calendar-id
+                               org-gcal-test-cancelled-event)
+       (should (equal (buffer-substring-no-properties
+                       (point-min) (point-max))
+                      ""))))))
 
 (ert-deftest org-gcal-test--update-existing-entry-scheduled ()
   "Same as ‘org-gcal-test--update-existing-entry’, but with SCHEDULED
@@ -509,8 +518,9 @@ Second paragraph
   "Verify that the org-gcal drawer is deleted by ‘org-gcal-delete-at-point’ if
 and only if the event at the point is successfully deleted by the Google
 Calendar API."
-  (org-gcal-test--with-temp-buffer
-      "\
+  (let ((org-gcal-remove-cancelled-events nil)
+        (org-gcal-update-cancelled-events-with-todo nil)
+        (buf "\
 * My event summary
 SCHEDULED: <2019-10-06 Sun 17:00>--<2019-10-07 Mon 21:00>
 :PROPERTIES:
@@ -524,29 +534,31 @@ My event description
 
 Second paragraph
 :END:
-"
-    ;; Don’t delete drawer if we don’t receive 200.
-    (with-mock
+"))
+    (org-gcal-test--with-temp-buffer
+     buf
+     ;; Don’t delete drawer if we don’t receive 200.
+     (with-mock
       (let ((deferred:debug t))
         (stub org-gcal--time-zone => '(0 "UTC")))
       (stub org-gcal-request-token => (deferred:succeed nil)
-        (stub y-or-n-p => t)
-        (stub alert => t)
-        (stub request-deferred =>
-              (deferred:succeed
-                (make-request-response
-                 :status-code 500
-                 :error-thrown '(error . nil))))
-        (org-back-to-heading)
-        (deferred:sync!
-          (deferred:$
-            (org-gcal-delete-at-point)
-            (deferred:error it #'ignore)))
-        (org-back-to-heading)
-        (should (re-search-forward ":org-gcal:" nil 'noerror))))
+            (stub y-or-n-p => t)
+            (stub alert => t)
+            (stub request-deferred =>
+                  (deferred:succeed
+                    (make-request-response
+                     :status-code 500
+                     :error-thrown '(error . nil))))
+            (org-back-to-heading)
+            (deferred:sync!
+              (deferred:$
+                (org-gcal-delete-at-point)
+                (deferred:error it #'ignore)))
+            (org-back-to-heading)
+            (should (re-search-forward ":org-gcal:" nil 'noerror))))
 
-    ;; Delete drawer if we do receive 200.
-    (with-mock
+     ;; Delete drawer if we do receive 200.
+     (with-mock
       (let ((deferred:debug t))
         (stub org-gcal--time-zone => '(0 "UTC"))
         (stub org-gcal-request-token => (deferred:succeed nil))
@@ -558,8 +570,22 @@ Second paragraph
         (org-back-to-heading)
         (deferred:sync! (org-gcal-delete-at-point))
         (org-back-to-heading)
-        (message "buffer: %s" (buffer-string))
-        (should-not (re-search-forward ":org-gcal:" nil 'noerror))))))
+        (should-not (re-search-forward ":org-gcal:" nil 'noerror))))
+
+     ;; Delete the entire entry if configured to
+     (with-mock
+      (let ((deferred:debug t)
+            (org-gcal-remove-cancelled-events t))
+        (stub org-gcal--time-zone => '(0 "UTC"))
+        (stub org-gcal-request-token => (deferred:succeed nil))
+        (stub y-or-n-p => t)
+        (stub request-deferred =>
+              (deferred:succeed
+                (make-request-response
+                 :status-code 200)))
+        (org-back-to-heading)
+        (deferred:sync! (org-gcal-delete-at-point))
+        (should (equal (buffer-string) "")))))))
 
 (ert-deftest org-gcal-test--ert-fail ()
   "Test handling of ERT failures in deferred code. Should fail."
