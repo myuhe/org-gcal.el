@@ -185,6 +185,19 @@ in any way.
    working. This should be rare - =org-gcal= will automatically refresh the
    OAuth access token when it expires (every 3600 seconds).
 
+** Deleting events
+
+If an event is deleted on the server, then updating an event (via
+=org-gcal-post-at-point=, =org-gcal-sync=, etc.) will optionally cancel and
+delete the corresponding Org mode headlines:
+
+- =org-gcal-update-cancelled-events-with-todo=: if set (the default), mark all
+  cancelled events with the =org-gcal-cancelled-todo-keyword= (default:
+  =CANCELLED=). This keyword must be one defined in =org-todo-keywords= or it
+  will be ignored.
+- =org-gcal-remove-cancelled-events=: if set, delete Org headlines of cancelled
+  events. The default value is ='ask=, which means to prompt for deletion.
+
 * Other features
 ** Minimize alerts
 
