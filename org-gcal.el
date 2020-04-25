@@ -40,6 +40,7 @@
 (require 'org-archive)
 (require 'org-element)
 (require 'org-id)
+(require 'parse-time)
 (require 'persist)
 (require 'cl-lib)
 (require 'rx)
@@ -175,8 +176,13 @@ entries."
  "Storage for Calendar API sync tokens, used for performing incremental sync.
 
 This is a a hash table mapping calendar IDs (as given in
-‘org-gcal-fetch-file-alist’) to its sync token. Persisted between sessions of
-Emacs. To clear sync tokens, call ‘org-gcal-sync-tokens-clear’.")
+‘org-gcal-fetch-file-alist’) to a list (EXPIRES SYNC-TOKEN).  EXPIRES is an
+Emacs time value that stores the time after which we should perform a full sync
+instead of an incremental sync using the SYNC-TOKEN stored from the Calendar
+API.
+
+Persisted between sessions of Emacs.  To clear sync tokens, call
+‘org-gcal-sync-tokens-clear’.")
 
 (cl-defstruct (org-gcal--event-entry
                (:constructor org-gcal--event-entry-create))
@@ -188,12 +194,13 @@ Emacs. To clear sync tokens, call ‘org-gcal-sync-tokens-clear’.")
   event)
 
 ;;;###autoload
-(defun org-gcal-sync (&optional a-token skip-export silent page-token)
+(defun org-gcal-sync (&optional a-token skip-export silent page-token up-time down-time)
   "Import events from calendars.
 Using A-TOKEN and export the ones to the calendar if unless
 SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications.
-PAGE-TOKEN is used internally to retrieve all events if the import
-requests produces a large number of events."
+
+PAGE-TOKEN, UP-TIME, and DOWN-TIME are used to pass internal variables between
+recursive invocations of this function."
   (interactive)
   (org-gcal--ensure-token)
   (when org-gcal-auto-archive
@@ -205,13 +212,12 @@ requests produces a large number of events."
     (lambda (x)
       (let* ((calendar-id (car x))
              (calendar-file (cdr x))
-             (a-token (if a-token
-                          a-token
-                        (org-gcal--get-access-token)))
-
+             (a-token (or a-token (org-gcal--get-access-token)))
              (skip-export skip-export)
              (silent silent)
-             (page-token page-token))
+             (page-token page-token)
+             (up-time (or up-time (org-gcal--up-time)))
+             (down-time (or down-time (org-gcal--down-time))))
         (deferred:$
           (request-deferred
            (format org-gcal-events-url calendar-id)
@@ -222,14 +228,24 @@ requests produces a large number of events."
               ("key" . ,org-gcal-client-secret)
               ("singleEvents" . "True")
               ("grant_type" . "authorization_code"))
-            (pcase (gethash calendar-id org-gcal--sync-tokens)
-              ((and (pred stringp) sync-token)
-               `(("syncToken" . ,sync-token)))
-              (_
-               `(("timeMin" . ,(org-gcal--subtract-time))
-                 ("timeMax" . ,(org-gcal--add-time)))))
-            (when page-token
-              `(("pageToken" . ,page-token))))
+            (seq-let [expires sync-token]
+                ;; Ensure ‘gethash’ return value is actually a list before
+                ;; passing to ‘seq-let’.
+                (when-let
+                    ((x (gethash calendar-id org-gcal--sync-tokens))
+                     ((listp x)))
+                  x)
+              (cond
+               ;; Don't use the sync token if it's expired.
+               ((and expires sync-token
+                     (time-less-p (current-time) expires))
+                `(("syncToken" . ,sync-token)))
+               (t
+                (remhash calendar-id org-gcal--sync-tokens)
+                `(("timeMin" . ,(org-gcal--format-time2iso up-time))
+                  ("timeMax" . ,(org-gcal--format-time2iso down-time))))))
+            (when-let ((pt (alist-get calendar-id page-token nil nil #'equal)))
+              `(("pageToken" . ,pt))))
            :parser 'org-gcal--json-read)
           (deferred:nextc it
             (lambda (response)
@@ -254,7 +270,8 @@ requests produces a large number of events."
                     (org-gcal--refresh-token)
                     (deferred:nextc it
                       (lambda (a-token)
-                        (org-gcal-sync a-token skip-export silent page-token)))))
+                        (org-gcal-sync a-token skip-export silent
+                                       page-token up-time down-time)))))
                  ((eq 403 status-code)
                   (org-gcal--notify "Received HTTP 403"
                                     "Ensure you enabled the Calendar API through the Developers Console, then try again.")
@@ -263,7 +280,8 @@ requests produces a large number of events."
                   (org-gcal--notify "Received HTTP 410"
                                     "Calendar API sync token expired - performing full sync.")
                   (remhash calendar-id org-gcal--sync-tokens)
-                  (org-gcal-sync a-token skip-export silent page-token))
+                  (org-gcal-sync a-token skip-export silent
+                                 page-token up-time down-time))
                  ;; We got some 2xx response, but for some reason no
                  ;; message body.
                  ((and (> 299 status-code) (eq data nil))
@@ -282,10 +300,22 @@ requests produces a large number of events."
                  ;; Fetch was successful. Return the list of events retrieved for
                  ;; further processing.
                  (t
-                  (setq page-token (plist-get data :nextPageToken))
+                  (setf (alist-get calendar-id page-token nil nil #'equal)
+                        (plist-get data :nextPageToken))
                   (let ((next-sync-token (plist-get data :nextSyncToken)))
                     (when next-sync-token
-                      (puthash calendar-id next-sync-token
+                      (puthash calendar-id
+                               (list
+                                ;; The first element is the expiration time of
+                                ;; the sync token. Note that, if the expiration
+                                ;; time already exists, we don't update it. We
+                                ;; want to expire the token according to the
+                                ;; time of the previous full sync.
+                                (or
+                                 (car (gethash calendar-id
+                                               org-gcal--sync-tokens))
+                                 down-time)
+                                next-sync-token)
                                org-gcal--sync-tokens)))
                   (org-gcal--filter (plist-get data :items)))))))
           ;; Iterate over all events. For previously unretrieved events, add
@@ -307,6 +337,21 @@ requests produces a large number of events."
                       :entry-id entry-id
                       :marker marker
                       :event event))
+                    ;; If event doesn’t already exist and is outside of the
+                    ;; range [‘org-gcal-up-days’, ‘org-gcal-down-days’], ignore
+                    ;; it. This is necessary because when called with
+                    ;; "syncToken", the Calendar API will return all events
+                    ;; changed on the calendar, without respecting
+                    ;; ‘org-gcal-up-days’ or ‘org-gcal-down-days’, which means
+                    ;; repeated events far in the future will be downloaded.
+                    ((or
+                      (time-less-p (org-gcal--parse-calendar-time
+                                    (plist-get event :start))
+                                   up-time)
+                      (time-less-p down-time
+                                   (org-gcal--parse-calendar-time
+                                    (plist-get event :end))))
+                     nil)
                     (t
                      ;; Otherwise, insert a new entry into the
                      ;; default fetch file.
@@ -342,8 +387,9 @@ requests produces a large number of events."
           ;; Retrieve the next page of results if needed.
           (deferred:nextc it
             (lambda (_)
-              (if page-token
-                  (org-gcal-sync a-token skip-export silent page-token)
+              (if (alist-get calendar-id page-token nil nil #'equal)
+                  (org-gcal-sync a-token skip-export silent
+                                 page-token up-time down-time)
                 (deferred:succeed nil))))
           (deferred:nextc it
             (lambda (_)
@@ -905,18 +951,37 @@ TO.  Instead an empty string is returned."
         :min  (string-to-number (org-gcal--safe-substring str 14 16))
         :sec  (string-to-number (org-gcal--safe-substring str 17 19))))
 
-(defun org-gcal--adjust-date (fn day)
-  (format-time-string "%Y-%m-%dT%H:%M:%SZ"
-                      (funcall fn (current-time) (days-to-time day)) t))
+(defun org-gcal--parse-calendar-time (time)
+  "Parse TIME, the start or end time object from a Calendar API Events \
+resource, into an Emacs time object."
+  (let ((date (plist-get time :date))
+        (date-time (plist-get time :dateTime)))
+    (cond
+     (date-time
+      (parse-iso8601-time-string date-time))
+     (date
+      (apply #'encode-time
+             ;; Full days have time strings with unknown hour, minute, and
+             ;; second, which ‘parse-time-string’ will set to
+             ;; nil. ‘encode-time’ can’t tolerate that, so instead set the time
+             ;; to 00:00:00.
+             `(0 0 0 .
+               ,(nthcdr 3 (parse-time-string date))))))))
 
-(defun org-gcal--add-time ()
-  (org-gcal--adjust-date 'time-add org-gcal-down-days))
+(defun org-gcal--down-time ()
+  "Convert ‘org-gcal-down-days’ to Emacs time value."
+  (time-add (current-time) (days-to-time org-gcal-down-days)))
 
-(defun org-gcal--subtract-time ()
-  (org-gcal--adjust-date 'time-subtract org-gcal-up-days))
+(defun org-gcal--up-time ()
+  "Convert ‘org-gcal-up-days’ to Emacs time value."
+  (time-subtract (current-time) (days-to-time org-gcal-up-days)))
 
 (defun org-gcal--time-zone (seconds)
   (current-time-zone (seconds-to-time seconds)))
+
+(defun org-gcal--format-time2iso (time)
+  "Format Emacs time value TIME to ISO format string."
+  (format-time-string "%FT%T%z" time))
 
 (defun org-gcal--format-iso2org (str &optional tz)
   (let* ((plst (org-gcal--parse-date str))
