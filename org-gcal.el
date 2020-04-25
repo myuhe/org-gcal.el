@@ -1410,7 +1410,8 @@ beginning position."
   (when org-gcal-notify-p
     (if org-gcal-logo-file
         (alert message :title title :icon org-gcal-logo-file)
-      (alert message :title title))))
+      (alert message :title title))
+    (message "%s\n%s" title message)))
 
 (defun org-gcal--time-to-seconds (plst)
   (time-to-seconds
