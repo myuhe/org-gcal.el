@@ -269,8 +269,8 @@ recursive invocations of this function."
                   (deferred:$
                     (org-gcal--refresh-token)
                     (deferred:nextc it
-                      (lambda (a-token)
-                        (org-gcal-sync a-token skip-export silent
+                      (lambda (_unused)
+                        (org-gcal-sync nil skip-export silent
                                        page-token up-time down-time)))))
                  ((eq 403 status-code)
                   (org-gcal--notify "Received HTTP 403"
@@ -1180,9 +1180,7 @@ access token A-TOKEN is not specified, it is loaded from the token file.
 
 Returns a ‘deferred’ function that on success returns a ‘request-response‘
 object."
-  (let ((a-token (if a-token
-                     a-token
-                   (org-gcal--get-access-token))))
+  (let ((a-token (or a-token (org-gcal--get-access-token))))
     (deferred:$
       (request-deferred
        (concat
@@ -1216,8 +1214,8 @@ object."
               (deferred:$
                 (org-gcal--refresh-token)
                 (deferred:nextc it
-                  (lambda (a-token)
-                    (org-gcal--get-event calendar-id event-id a-token)))))
+                  (lambda (_unused)
+                    (org-gcal--get-event calendar-id event-id nil)))))
              ;; Generic error-handler meant to provide useful information about
              ;; failure cases not otherwise explicitly specified.
              ((not (eq error-thrown nil))
@@ -1243,9 +1241,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
         (etime (org-gcal--param-date end))
         (stime-alt (org-gcal--param-date-alt start))
         (etime-alt (org-gcal--param-date-alt end))
-        (a-token (if a-token
-                     a-token
-                   (org-gcal--get-access-token))))
+        (a-token (or a-token (org-gcal--get-access-token))))
     (deferred:try
       (deferred:$
         (request-deferred
@@ -1298,9 +1294,9 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                 (deferred:$
                   (org-gcal--refresh-token)
                   (deferred:nextc it
-                    (lambda (a-token)
+                    (lambda (_unused)
                       (org-gcal--post-event start end smry loc desc calendar-id
-                                            marker etag event-id a-token
+                                            marker etag event-id nil
                                             skip-import skip-export)))))
                ;; ETag on current entry is stale. This means the event on the
                ;; server has been updated. In that case, update the event using
@@ -1356,9 +1352,7 @@ If ETAG is provided, it is used to retrieve the event data from the server and
 overwrite the event at MARKER if the event has changed on the server.
 
 Returns a ‘deferred’ object that can be used to wait for completion."
-  (let ((a-token (if a-token
-                     a-token
-                   (org-gcal--get-access-token))))
+  (let ((a-token (or a-token (org-gcal--get-access-token))))
     (deferred:try
       (deferred:$
         (request-deferred
@@ -1401,9 +1395,9 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                 (deferred:$
                   (org-gcal--refresh-token)
                   (deferred:nextc it
-                    (lambda (a-token)
+                    (lambda (_unused)
                       (org-gcal--delete-event calendar-id event-id
-                                              etag marker a-token)))))
+                                              etag marker nil)))))
                ;; ETag on current entry is stale. This means the event on the
                ;; server has been updated. In that case, update the event using
                ;; the data from the server.
