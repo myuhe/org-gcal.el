@@ -222,12 +222,13 @@ recursive invocations of this function."
           (request-deferred
            (format org-gcal-events-url calendar-id)
            :type "GET"
+           :headers
+           `(("Accept" . "application/json")
+             ("Authorization" . ,(format "Bearer %s" a-token)))
            :params
            (append
             `(("access_token" . ,a-token)
-              ("key" . ,org-gcal-client-secret)
-              ("singleEvents" . "True")
-              ("grant_type" . "authorization_code"))
+              ("singleEvents" . "True"))
             (seq-let [expires sync-token]
                 ;; Ensure ‘gethash’ return value is actually a list before
                 ;; passing to ‘seq-let’.
@@ -269,8 +270,8 @@ recursive invocations of this function."
                   (deferred:$
                     (org-gcal--refresh-token)
                     (deferred:nextc it
-                      (lambda (a-token)
-                        (org-gcal-sync a-token skip-export silent
+                      (lambda (_unused)
+                        (org-gcal-sync nil skip-export silent
                                        page-token up-time down-time)))))
                  ((eq 403 status-code)
                   (org-gcal--notify "Received HTTP 403"
@@ -1180,19 +1181,16 @@ access token A-TOKEN is not specified, it is loaded from the token file.
 
 Returns a ‘deferred’ function that on success returns a ‘request-response‘
 object."
-  (let ((a-token (if a-token
-                     a-token
-                   (org-gcal--get-access-token))))
+  (let ((a-token (or a-token (org-gcal--get-access-token))))
     (deferred:$
       (request-deferred
        (concat
         (format org-gcal-events-url calendar-id)
         (concat "/" event-id))
        :type "GET"
-       :headers '(("Content-Type" . "application/json"))
-       :params `(("access_token" . ,a-token)
-                 ("key" . ,org-gcal-client-secret)
-                 ("grant_type" . "authorization_code"))
+       :headers
+       `(("Accept" . "application/json")
+         ("Authorization" . ,(format "Bearer %s" a-token)))
        :parser 'org-gcal--json-read)
       (deferred:nextc it
         (lambda (response)
@@ -1216,8 +1214,8 @@ object."
               (deferred:$
                 (org-gcal--refresh-token)
                 (deferred:nextc it
-                  (lambda (a-token)
-                    (org-gcal--get-event calendar-id event-id a-token)))))
+                  (lambda (_unused)
+                    (org-gcal--get-event calendar-id event-id nil)))))
              ;; Generic error-handler meant to provide useful information about
              ;; failure cases not otherwise explicitly specified.
              ((not (eq error-thrown nil))
@@ -1243,9 +1241,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
         (etime (org-gcal--param-date end))
         (stime-alt (org-gcal--param-date-alt start))
         (etime-alt (org-gcal--param-date-alt end))
-        (a-token (if a-token
-                     a-token
-                   (org-gcal--get-access-token))))
+        (a-token (or a-token (org-gcal--get-access-token))))
     (deferred:try
       (deferred:$
         (request-deferred
@@ -1255,7 +1251,9 @@ Returns a ‘deferred’ object that can be used to wait for completion."
             (concat "/" event-id)))
          :type (if event-id "PATCH" "POST")
          :headers (append
-                   '(("Content-Type" . "application/json"))
+                   `(("Content-Type" . "application/json")
+                     ("Accept" . "application/json")
+                     ("Authorization" . ,(format "Bearer %s" a-token)))
                    (cond
                     ((null etag) nil)
                     ((null event-id)
@@ -1271,10 +1269,6 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                                ("location" . ,loc)
                                ("description" . ,desc)))
                 'utf-8)
-         :params `(("access_token" . ,a-token)
-                   ("key" . ,org-gcal-client-secret)
-                   ("grant_type" . "authorization_code"))
-
          :parser 'org-gcal--json-read)
         (deferred:nextc it
           (lambda (response)
@@ -1298,9 +1292,9 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                 (deferred:$
                   (org-gcal--refresh-token)
                   (deferred:nextc it
-                    (lambda (a-token)
+                    (lambda (_unused)
                       (org-gcal--post-event start end smry loc desc calendar-id
-                                            marker etag event-id a-token
+                                            marker etag event-id nil
                                             skip-import skip-export)))))
                ;; ETag on current entry is stale. This means the event on the
                ;; server has been updated. In that case, update the event using
@@ -1356,9 +1350,7 @@ If ETAG is provided, it is used to retrieve the event data from the server and
 overwrite the event at MARKER if the event has changed on the server.
 
 Returns a ‘deferred’ object that can be used to wait for completion."
-  (let ((a-token (if a-token
-                     a-token
-                   (org-gcal--get-access-token))))
+  (let ((a-token (or a-token (org-gcal--get-access-token))))
     (deferred:try
       (deferred:$
         (request-deferred
@@ -1367,16 +1359,15 @@ Returns a ‘deferred’ object that can be used to wait for completion."
           (concat "/" event-id))
          :type "DELETE"
          :headers (append
-                   '(("Content-Type" . "application/json"))
+                   `(("Content-Type" . "application/json")
+                     ("Accept" . "application/json")
+                     ("Authorization" . ,(format "Bearer %s" a-token)))
                    (cond
                     ((null etag) nil)
                     ((null event-id)
                      (error "Event cannot have ETag set when event ID absent"))
                     (t
                      `(("If-Match" . ,etag)))))
-         :params `(("access_token" . ,a-token)
-                   ("key" . ,org-gcal-client-secret)
-                   ("grant_type" . "authorization_code"))
 
          :parser 'org-gcal--json-read)
         (deferred:nextc it
@@ -1401,9 +1392,9 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                 (deferred:$
                   (org-gcal--refresh-token)
                   (deferred:nextc it
-                    (lambda (a-token)
+                    (lambda (_unused)
                       (org-gcal--delete-event calendar-id event-id
-                                              etag marker a-token)))))
+                                              etag marker nil)))))
                ;; ETag on current entry is stale. This means the event on the
                ;; server has been updated. In that case, update the event using
                ;; the data from the server.
