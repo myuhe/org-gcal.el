@@ -222,12 +222,13 @@ recursive invocations of this function."
           (request-deferred
            (format org-gcal-events-url calendar-id)
            :type "GET"
+           :headers
+           `(("Accept" . "application/json")
+             ("Authorization" . ,(format "Bearer %s" a-token)))
            :params
            (append
             `(("access_token" . ,a-token)
-              ("key" . ,org-gcal-client-secret)
-              ("singleEvents" . "True")
-              ("grant_type" . "authorization_code"))
+              ("singleEvents" . "True"))
             (seq-let [expires sync-token]
                 ;; Ensure ‘gethash’ return value is actually a list before
                 ;; passing to ‘seq-let’.
@@ -1187,10 +1188,9 @@ object."
         (format org-gcal-events-url calendar-id)
         (concat "/" event-id))
        :type "GET"
-       :headers '(("Content-Type" . "application/json"))
-       :params `(("access_token" . ,a-token)
-                 ("key" . ,org-gcal-client-secret)
-                 ("grant_type" . "authorization_code"))
+       :headers
+       `(("Accept" . "application/json")
+         ("Authorization" . ,(format "Bearer %s" a-token)))
        :parser 'org-gcal--json-read)
       (deferred:nextc it
         (lambda (response)
@@ -1251,7 +1251,9 @@ Returns a ‘deferred’ object that can be used to wait for completion."
             (concat "/" event-id)))
          :type (if event-id "PATCH" "POST")
          :headers (append
-                   '(("Content-Type" . "application/json"))
+                   `(("Content-Type" . "application/json")
+                     ("Accept" . "application/json")
+                     ("Authorization" . ,(format "Bearer %s" a-token)))
                    (cond
                     ((null etag) nil)
                     ((null event-id)
@@ -1267,10 +1269,6 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                                ("location" . ,loc)
                                ("description" . ,desc)))
                 'utf-8)
-         :params `(("access_token" . ,a-token)
-                   ("key" . ,org-gcal-client-secret)
-                   ("grant_type" . "authorization_code"))
-
          :parser 'org-gcal--json-read)
         (deferred:nextc it
           (lambda (response)
@@ -1361,16 +1359,15 @@ Returns a ‘deferred’ object that can be used to wait for completion."
           (concat "/" event-id))
          :type "DELETE"
          :headers (append
-                   '(("Content-Type" . "application/json"))
+                   `(("Content-Type" . "application/json")
+                     ("Accept" . "application/json")
+                     ("Authorization" . ,(format "Bearer %s" a-token)))
                    (cond
                     ((null etag) nil)
                     ((null event-id)
                      (error "Event cannot have ETag set when event ID absent"))
                     (t
                      `(("If-Match" . ,etag)))))
-         :params `(("access_token" . ,a-token)
-                   ("key" . ,org-gcal-client-secret)
-                   ("grant_type" . "authorization_code"))
 
          :parser 'org-gcal--json-read)
         (deferred:nextc it
