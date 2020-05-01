@@ -127,7 +127,8 @@ Predicate functions take an event, and if they return nil the
   :group 'org-gcal
   :type 'string)
 
-(defcustom org-gcal-remove-cancelled-events 'ask
+(defvaralias 'org-gcal-remove-cancelled-events 'org-gcal-remove-api-cancelled-events)
+(defcustom org-gcal-remove-api-cancelled-events 'ask
   "Whether to remove Org-mode headlines for events cancelled in Google Calendar.
 
 The events will always be marked cancelled before they’re removed if
@@ -137,6 +138,19 @@ The events will always be marked cancelled before they’re removed if
           (const :tag "Never remove" nil)
           (const :tag "Prompt whether to remove" 'ask)
           (const :tag "Always remove without prompting" t)))
+
+(defcustom org-gcal-remove-events-with-cancelled-todo nil
+  "Whether to attempt to remove Org-mode headlines for events marked with \
+‘org-gcal-cancelled-todo-keyword’.
+
+By default, this is set to nil so that if you decline removing an event when
+‘org-gcal-remove-api-cancelled-events’ is set to ‘ask’, you won’t be prompted
+to remove the event again.  Set to t to override this.
+
+Note that whether a headline is removed is still controlled by
+‘org-gcal-remove-api-cancelled-events’."
+  :group 'org-gcal
+  :type 'boolean)
 
 (defcustom org-gcal-calendar-id-property "calendar-id"
   "\
@@ -1127,19 +1141,25 @@ an error will be thrown. Point is not preserved."
   "Perform actions to be done on cancelled entries."
   (unless (org-at-heading-p)
     (user-error "Must be on Org-mode heading"))
-  (when (and org-gcal-update-cancelled-events-with-todo
-             (member org-gcal-cancelled-todo-keyword
-                     org-todo-keywords-1))
-    (let ((org-inhibit-logging t))
-      (org-todo org-gcal-cancelled-todo-keyword)))
-  (org-gcal--maybe-remove-entry))
+  (let ((already-cancelled
+         (string= (nth 2 (org-heading-components))
+                  org-gcal-cancelled-todo-keyword)))
+    (unless already-cancelled
+      (when (and org-gcal-update-cancelled-events-with-todo
+                 (member org-gcal-cancelled-todo-keyword
+                         org-todo-keywords-1))
+        (let ((org-inhibit-logging t))
+          (org-todo org-gcal-cancelled-todo-keyword))))
+    (when (or org-gcal-remove-events-with-cancelled-todo
+              (not already-cancelled))
+      (org-gcal--maybe-remove-entry))))
 
 (defun org-gcal--maybe-remove-entry ()
   "Remove the entry at the current heading, depending on the value of \
-‘org-gcal-remove-cancelled-events’."
-  (when-let ((org-gcal-remove-cancelled-events)
+‘org-gcal-remove-api-cancelled-events’."
+  (when-let ((org-gcal-remove-api-cancelled-events)
              (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
-             ((or (eq org-gcal-remove-cancelled-events t)
+             ((or (eq org-gcal-remove-api-cancelled-events t)
                   (y-or-n-p (format "Delete Org headline for cancelled event\n%s? "
                                     (or smry ""))))))
     (delete-region

@@ -195,8 +195,14 @@ delete the corresponding Org mode headlines:
   cancelled events with the =org-gcal-cancelled-todo-keyword= (default:
   =CANCELLED=). This keyword must be one defined in =org-todo-keywords= or it
   will be ignored.
-- =org-gcal-remove-cancelled-events=: if set, delete Org headlines of cancelled
-  events. The default value is ='ask=, which means to prompt for deletion.
+- =org-gcal-remove-api-cancelled-events=: if set, delete Org headlines of
+  cancelled events. The default value is ='ask=, which means to prompt for
+  deletion.
+- =org-gcal-remove-events-with-cancelled-todo=: by default, avoid deleting Org
+  headlines of events that are marked with =org-gcal-cancelled-todo-keyword=
+  beforehand, to allow preserving a headline for a cancelled event from being
+  deleted. Setting this to =t= always deletes headlines, even already cancelled
+  ones.
 
 * Other features
 ** Minimize alerts
