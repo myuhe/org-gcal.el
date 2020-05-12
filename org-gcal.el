@@ -174,9 +174,10 @@
                       ;; takes care of that step.
                       ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
                                    status))
-                         (org-gcal--notify
-                          "Received HTTP 401"
-                          "OAuth token expired. Now trying to refresh-token")
+                         (unless silent
+			   (org-gcal--notify
+                             "Received HTTP 401"
+                             "OAuth token expired. Now trying to refresh-token"))
                          (deferred:next
                            (lambda()
                              (org-gcal-refresh-token 'org-gcal-sync skip-export))))
