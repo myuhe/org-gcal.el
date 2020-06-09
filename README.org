@@ -137,6 +137,11 @@ an event from the Google Calendar API:
     API for the event (see [[https://developers.google.com/calendar/v3/version-resources#conditional_modification][the Google Calendar API documentation]]). Used to
     support automatically updating the headline using the most recent event data
     from the API if it has changed on the server since it was last retrieved.
+    
+    **NOTE**: If the =ETag= property is present on a headline (even if empty (=""=)) and not equal to the value
+    stored by the Calendar API, your event will be **overwritten** with the data from the server. In this case,
+    you'll see a notification for a HTTP 512. This is intended behavior. If your event is being overwritten when
+    you don't want it, remove the =ETag= property from your headline.
   - =ID= :: contains =<event_id>/<calendar_id>= of the event, as provided by the
     Google Calendar API. Don't change the ID manually, or else the event won't be
     able to retrieved or updated from the headline.
