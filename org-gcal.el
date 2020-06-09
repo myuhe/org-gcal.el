@@ -38,6 +38,7 @@
 (require 'request-deferred)
 (require 'org)
 (require 'org-archive)
+(require 'org-clock)
 (require 'org-element)
 (require 'org-id)
 (require 'parse-time)
@@ -647,6 +648,12 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
            (calendar-id
             (org-entry-get (point) org-gcal-calendar-id-property))
            (tobj) (start) (end) (desc))
+      ;; Fill in Calendar ID if not already present.
+      (unless calendar-id
+        (setq calendar-id
+              (completing-read "Calendar ID: "
+                               (mapcar #'car org-gcal-file-alist)))
+        (org-entry-put (point) org-gcal-calendar-id-property calendar-id))
       ;; Parse :org-gcal: drawer for event time and description.
       (goto-char (marker-position marker))
       (when
@@ -685,23 +692,48 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
                    desc))))))
       ;; Prefer to read event time from the SCHEDULED property if present.
       (setq tobj (or (org-element-property :scheduled elem) tobj))
-      (setq
-       start
-       (org-gcal--format-org2iso
-        (plist-get (cadr tobj) :year-start)
-        (plist-get (cadr tobj) :month-start)
-        (plist-get (cadr tobj) :day-start)
-        (plist-get (cadr tobj) :hour-start)
-        (plist-get (cadr tobj) :minute-start)
-        (when (plist-get (cadr tobj) :hour-start) t))
-       end
-       (org-gcal--format-org2iso
-        (plist-get (cadr tobj) :year-end)
-        (plist-get (cadr tobj) :month-end)
-        (plist-get (cadr tobj) :day-end)
-        (plist-get (cadr tobj) :hour-end)
-        (plist-get (cadr tobj) :minute-end)
-        (when (plist-get (cadr tobj) :hour-start) t)))
+      (cond
+       (tobj
+        (setq
+         start
+         (org-gcal--format-org2iso
+          (plist-get (cadr tobj) :year-start)
+          (plist-get (cadr tobj) :month-start)
+          (plist-get (cadr tobj) :day-start)
+          (plist-get (cadr tobj) :hour-start)
+          (plist-get (cadr tobj) :minute-start)
+          (when (plist-get (cadr tobj) :hour-start) t))
+         end
+         (org-gcal--format-org2iso
+          (plist-get (cadr tobj) :year-end)
+          (plist-get (cadr tobj) :month-end)
+          (plist-get (cadr tobj) :day-end)
+          (plist-get (cadr tobj) :hour-end)
+          (plist-get (cadr tobj) :minute-end)
+          (when (plist-get (cadr tobj) :hour-start) t))))
+       ;; If neither the org-gcal drawer or SCHEDULED property is present,
+       ;; generate some reasonable value for the timestamp.
+       (t
+        (let* ((start-time (org-read-date 'with-time 'to-time))
+               (min-duration 5)
+               (resolution 5)
+               (duration-default
+                (org-duration-from-minutes
+                 (max
+                  min-duration
+                  ;; Round up to the nearest multiple of ‘resolution’ minutes.
+                  (* resolution
+                     (ceiling
+                      (/ (- (org-duration-to-minutes
+                             (or (org-element-property :EFFORT elem) "0:00"))
+                            (org-clock-sum-current-item))
+                         resolution))))))
+               (duration (read-from-minibuffer "Duration: " duration-default))
+               (duration-minutes (org-duration-to-minutes duration))
+               (duration-seconds (* 60 duration-minutes))
+               (end-time (time-add start-time duration-seconds)))
+          (setq start (org-gcal--format-time2iso start-time)
+                end (org-gcal--format-time2iso end-time)))))
       (org-gcal--post-event start end smry loc desc calendar-id marker etag
                             event-id nil skip-import skip-export))))
 
@@ -996,7 +1028,7 @@ resource, into an Emacs time object."
 
 (defun org-gcal--format-time2iso (time)
   "Format Emacs time value TIME to ISO format string."
-  (format-time-string "%FT%T%z" time))
+  (format-time-string "%FT%T%z" time (car (org-gcal--time-zone 0))))
 
 (defun org-gcal--format-iso2org (str &optional tz)
   (let* ((plst (org-gcal--parse-date str))

@@ -581,6 +581,52 @@ Second paragraph
                                   * * *))
       (org-gcal-post-at-point))))
 
+(ert-deftest org-gcal-test--post-at-point-no-properties ()
+  "Verify that ‘org-gcal-post-to-point’ fills in entries with no relevant
+org-gcal properties with sane default values."
+  (org-gcal-test--with-temp-buffer
+      "\
+* My event summary
+"
+    (with-mock
+      (stub completing-read => "foo@foobar.com")
+      (stub org-read-date => (encode-time '(0 0 17 6 10 2019 nil nil t)))
+      (stub read-from-minibuffer => "4:00")
+      (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-gcal-request-token => (deferred:succeed nil))
+      (mock (org-gcal--post-event "2019-10-06T17:00:00+0000" "2019-10-06T21:00:00+0000"
+                                  "My event summary" nil
+                                  nil
+                                  "foo@foobar.com"
+                                  * nil nil
+                                  * * *))
+      (org-gcal-post-at-point)))
+  (org-gcal-test--with-temp-buffer
+      "\
+* My event summary
+:PROPERTIES:
+:Effort: 2:00
+:END:
+:LOGBOOK:
+CLOCK: [2019-06-06 Thu 17:00]--[2019-06-06 Thu 18:00] => 1:00
+:END:
+"
+    (with-mock
+      (stub completing-read => "foo@foobar.com")
+      (stub org-read-date => (encode-time '(0 0 17 6 10 2019 nil nil t)))
+      (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-gcal-request-token => (deferred:succeed nil))
+      (cl-letf
+          (((symbol-function #'read-from-minibuffer)
+            (lambda (_p initial-contents) initial-contents)))
+        (mock (org-gcal--post-event "2019-10-06T17:00:00+0000" "2019-10-06T18:00:00+0000"
+                                    "My event summary" nil
+                                    nil
+                                    "foo@foobar.com"
+                                    * nil nil
+                                    * * *))
+        (org-gcal-post-at-point)))))
+
 (ert-deftest org-gcal-test--post-at-point-etag-no-id ()
   "Verify that ‘org-gcal-post-to-point’ fails if an ETag is present but
 an event ID is not."
