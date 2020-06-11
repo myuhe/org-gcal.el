@@ -616,46 +616,16 @@ Call ‘org-back-to-heading’ with the invisible-ok argument set to true.
 We always intend to go back to the invisible heading here."
   (org-back-to-heading 'invisible-ok))
 
-;;;###autoload
-(defun org-gcal-post-at-point (&optional skip-import skip-export)
-  "\
-Post entry at point to current calendar. This overwrites the event on the
-server with the data from the entry, except if the ‘org-gcal-etag-property’ is
-present and is out of sync with the server, in which case the entry is
-overwritten with data from the server instead.
+(defun org-gcal--get-time-and-desc ()
+  "Get the timestamp and description of the event at point.
 
-If SKIP-IMPORT is not nil, don’t overwrite the entry with data from the server.
-If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
-  (interactive)
-  (org-gcal--ensure-token)
-  (save-excursion
-    ;; Post entry at point in org-agenda buffer.
-    (when (eq major-mode 'org-agenda-mode)
-      (let ((m (org-get-at-bol 'org-hd-marker)))
-        (set-buffer (marker-buffer m))
-        (goto-char (marker-position m))))
-    (end-of-line)
-    (org-gcal--back-to-heading)
-    (let* ((skip-import skip-import)
-           (skip-export skip-export)
-           (marker (point-marker))
-           (elem (org-element-headline-parser (point-max) t))
-           (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
-           (loc (org-entry-get (point) "LOCATION"))
-           (event-id (org-gcal--event-id-from-entry-id
-                      (org-entry-get (point) "ID")))
-           (etag (org-entry-get (point) org-gcal-etag-property))
-           (calendar-id
-            (org-entry-get (point) org-gcal-calendar-id-property))
-           (tobj) (start) (end) (desc))
-      ;; Fill in Calendar ID if not already present.
-      (unless calendar-id
-        (setq calendar-id
-              (completing-read "Calendar ID: "
-                               (mapcar #'car org-gcal-file-alist)))
-        (org-entry-put (point) org-gcal-calendar-id-property calendar-id))
+Return a plist with :start, :end, and :desc keys. The value for a key is nil if
+not present."
+  (let (start end desc tobj elem)
+    (save-excursion
+      (org-gcal--back-to-heading)
+      (setq elem (org-element-at-point))
       ;; Parse :org-gcal: drawer for event time and description.
-      (goto-char (marker-position marker))
       (when
           (re-search-forward
             (format "^[ \t]*:%s:[ \t]*$" org-gcal-drawer-name)
@@ -689,11 +659,11 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
                   (replace-regexp-in-string
                    " *:PROPERTIES:\n *\\(.*\\(?:\n.*\\)*?\\) *:END:\n+"
                    ""
-                   desc))))))
-      ;; Prefer to read event time from the SCHEDULED property if present.
-      (setq tobj (or (org-element-property :scheduled elem) tobj))
-      (cond
-       (tobj
+                   desc)))))))
+    ;; Prefer to read event time from the SCHEDULED property if present.
+    (setq tobj (or (org-element-property :scheduled elem) tobj))
+    (when tobj
+      (when (plist-get (cadr tobj) :year-start)
         (setq
          start
          (org-gcal--format-org2iso
@@ -702,7 +672,9 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
           (plist-get (cadr tobj) :day-start)
           (plist-get (cadr tobj) :hour-start)
           (plist-get (cadr tobj) :minute-start)
-          (when (plist-get (cadr tobj) :hour-start) t))
+          (when (plist-get (cadr tobj) :hour-start) t))))
+      (when (plist-get (cadr tobj) :year-end)
+        (setq
          end
          (org-gcal--format-org2iso
           (plist-get (cadr tobj) :year-end)
@@ -710,32 +682,75 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
           (plist-get (cadr tobj) :day-end)
           (plist-get (cadr tobj) :hour-end)
           (plist-get (cadr tobj) :minute-end)
-          (when (plist-get (cadr tobj) :hour-start) t))))
-       ;; If neither the org-gcal drawer or SCHEDULED property is present,
-       ;; generate some reasonable value for the timestamp.
-       (t
-        (let* ((start-time (org-read-date 'with-time 'to-time))
-               (min-duration 5)
-               (resolution 5)
-               (duration-default
-                (org-duration-from-minutes
-                 (max
-                  min-duration
-                  ;; Round up to the nearest multiple of ‘resolution’ minutes.
-                  (* resolution
-                     (ceiling
-                      (/ (- (org-duration-to-minutes
-                             (or (org-element-property :EFFORT elem) "0:00"))
-                            (org-clock-sum-current-item))
-                         resolution))))))
-               (duration (read-from-minibuffer "Duration: " duration-default))
-               (duration-minutes (org-duration-to-minutes duration))
-               (duration-seconds (* 60 duration-minutes))
-               (end-time (time-add start-time duration-seconds)))
-          (setq start (org-gcal--format-time2iso start-time)
-                end (org-gcal--format-time2iso end-time)))))
-      (org-gcal--post-event start end smry loc desc calendar-id marker etag
-                            event-id nil skip-import skip-export))))
+          (when (plist-get (cadr tobj) :hour-end) t))))
+      (list :start start :end end :desc desc))))
+
+;;;###autoload
+(defun org-gcal-post-at-point (&optional skip-import skip-export)
+  "\
+Post entry at point to current calendar. This overwrites the event on the
+server with the data from the entry, except if the ‘org-gcal-etag-property’ is
+present and is out of sync with the server, in which case the entry is
+overwritten with data from the server instead.
+
+If SKIP-IMPORT is not nil, don’t overwrite the entry with data from the server.
+If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
+  (interactive)
+  (org-gcal--ensure-token)
+  (save-excursion
+    ;; Post entry at point in org-agenda buffer.
+    (when (eq major-mode 'org-agenda-mode)
+      (let ((m (org-get-at-bol 'org-hd-marker)))
+        (set-buffer (marker-buffer m))
+        (goto-char (marker-position m))))
+    (end-of-line)
+    (org-gcal--back-to-heading)
+    (let* ((skip-import skip-import)
+           (skip-export skip-export)
+           (marker (point-marker))
+           (elem (org-element-headline-parser (point-max) t))
+           (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
+           (loc (org-entry-get (point) "LOCATION"))
+           (event-id (org-gcal--event-id-from-entry-id
+                      (org-entry-get (point) "ID")))
+           (etag (org-entry-get (point) org-gcal-etag-property))
+           (calendar-id
+            (org-entry-get (point) org-gcal-calendar-id-property)))
+      ;; Fill in Calendar ID if not already present.
+      (unless calendar-id
+        (setq calendar-id
+              (completing-read "Calendar ID: "
+                               (mapcar #'car org-gcal-file-alist)))
+        (org-entry-put (point) org-gcal-calendar-id-property calendar-id))
+      ;; Read currently-present start and end times and description. Fill in a
+      ;; reasonable start and end time if either is missing.
+      (let* ((time-desc (org-gcal--get-time-and-desc))
+             (start (plist-get time-desc :start))
+             (end (plist-get time-desc :end))
+             (desc (plist-get time-desc :desc)))
+        (unless end
+          (let* ((start-time (or start (org-read-date 'with-time 'to-time)))
+                 (min-duration 5)
+                 (resolution 5)
+                 (duration-default
+                  (org-duration-from-minutes
+                   (max
+                    min-duration
+                    ;; Round up to the nearest multiple of ‘resolution’ minutes.
+                    (* resolution
+                       (ceiling
+                        (/ (- (org-duration-to-minutes
+                               (or (org-element-property :EFFORT elem) "0:00"))
+                              (org-clock-sum-current-item))
+                           resolution))))))
+                 (duration (read-from-minibuffer "Duration: " duration-default))
+                 (duration-minutes (org-duration-to-minutes duration))
+                 (duration-seconds (* 60 duration-minutes))
+                 (end-time (time-add start-time duration-seconds)))
+            (setq start (org-gcal--format-time2iso start-time)
+                  end (org-gcal--format-time2iso end-time))))
+        (org-gcal--post-event start end smry loc desc calendar-id marker etag
+                              event-id nil skip-import skip-export)))))
 
 ;;;###autoload
 (defun org-gcal-delete-at-point ()
