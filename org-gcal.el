@@ -184,7 +184,16 @@ entries."
 (defconst org-gcal-resource-url "https://www.googleapis.com/auth/calendar"
   "URL used to request access to calendar resources.")
 
-(defconst org-gcal-events-url "https://www.googleapis.com/calendar/v3/calendars/%s/events")
+(defun org-gcal-events-url (calendar-id)
+  "URL used to request access to events on calendar CALENDAR-ID."
+  (format "https://www.googleapis.com/calendar/v3/calendars/%s/events"
+          calendar-id))
+
+(defun org-gcal-instances-url (calendar-id event-id)
+  "URL used to request access to instances of recurring event EVENT-ID on \
+calendar CALENDAR-ID."
+  (format "https://www.googleapis.com/calendar/v3/calendars/%s/events/%s/instances"
+          calendar-id event-id))
 
 (persist-defvar
  org-gcal--sync-tokens (make-hash-table)
@@ -209,13 +218,10 @@ Persisted between sessions of Emacs.  To clear sync tokens, call
   event)
 
 ;;;###autoload
-(defun org-gcal-sync (&optional a-token skip-export silent page-token up-time down-time)
+(defun org-gcal-sync (&optional skip-export silent)
   "Import events from calendars.
-Using A-TOKEN and export the ones to the calendar if unless
-SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications.
-
-PAGE-TOKEN, UP-TIME, and DOWN-TIME are used to pass internal variables between
-recursive invocations of this function."
+Export the ones to the calendar if unless
+SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
   (interactive)
   (org-gcal--ensure-token)
   (when org-gcal-auto-archive
@@ -223,210 +229,392 @@ recursive invocations of this function."
       (with-current-buffer
           (find-file-noselect (cdr i))
         (org-gcal--archive-old-event))))
-  (deferred:loop org-gcal-fetch-file-alist
-    (lambda (x)
-      (let* ((calendar-id (car x))
-             (calendar-file (cdr x))
-             (a-token (or a-token (org-gcal--get-access-token)))
-             (skip-export skip-export)
-             (silent silent)
-             (page-token page-token)
-             (up-time (or up-time (org-gcal--up-time)))
-             (down-time (or down-time (org-gcal--down-time))))
+  (let ((up-time (org-gcal--up-time))
+        (down-time (org-gcal--down-time)))
+    (deferred:loop org-gcal-fetch-file-alist
+      (lambda (calendar-id-file)
         (deferred:$
-          (request-deferred
-           (format org-gcal-events-url calendar-id)
-           :type "GET"
-           :headers
-           `(("Accept" . "application/json")
-             ("Authorization" . ,(format "Bearer %s" a-token)))
-           :params
-           (append
-            `(("access_token" . ,a-token)
-              ("singleEvents" . "True"))
-            (seq-let [expires sync-token]
-                ;; Ensure ‘gethash’ return value is actually a list before
-                ;; passing to ‘seq-let’.
-                (when-let
-                    ((x (gethash calendar-id org-gcal--sync-tokens))
-                     ((listp x)))
-                  x)
-              (cond
-               ;; Don't use the sync token if it's expired.
-               ((and expires sync-token
-                     (time-less-p (current-time) expires))
-                `(("syncToken" . ,sync-token)))
-               (t
-                (remhash calendar-id org-gcal--sync-tokens)
-                `(("timeMin" . ,(org-gcal--format-time2iso up-time))
-                  ("timeMax" . ,(org-gcal--format-time2iso down-time))))))
-            (when-let ((pt (alist-get calendar-id page-token nil nil #'equal)))
-              `(("pageToken" . ,pt))))
-           :parser 'org-gcal--json-read)
-          (deferred:nextc it
-            (lambda (response)
-              (let
-                  ((data (request-response-data response))
-                   (status-code (request-response-status-code response))
-                   (error-thrown (request-response-error-thrown response)))
-                (cond
-                 ;; If there is no network connectivity, the response will
-                 ;; not include a status code.
-                 ((eq status-code nil)
-                  (org-gcal--notify
-                   "Got Error"
-                   "Could not contact remote service. Please check your network connectivity.")
-                  (error "Got error %S: %S" status-code error-thrown))
-                 ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
-                              status-code))
-                  (org-gcal--notify
-                   "Received HTTP 401"
-                   "OAuth token expired. Now trying to refresh-token")
-                  (deferred:$
-                    (org-gcal--refresh-token)
-                    (deferred:nextc it
-                      (lambda (_unused)
-                        (org-gcal-sync nil skip-export silent
-                                       page-token up-time down-time)))))
-                 ((eq 403 status-code)
-                  (org-gcal--notify "Received HTTP 403"
-                                    "Ensure you enabled the Calendar API through the Developers Console, then try again.")
-                  (error "Got error %S: %S" status-code error-thrown))
-                 ((eq 410 status-code)
-                  (org-gcal--notify "Received HTTP 410"
-                                    "Calendar API sync token expired - performing full sync.")
-                  (remhash calendar-id org-gcal--sync-tokens)
-                  (org-gcal-sync a-token skip-export silent
-                                 page-token up-time down-time))
-                 ;; We got some 2xx response, but for some reason no
-                 ;; message body.
-                 ((and (> 299 status-code) (eq data nil))
-                  (org-gcal--notify
-                   (concat "Received HTTP" (number-to-string status-code))
-                   "Error occured, but no message body.")
-                  (error "Got error %S: %S" status-code error-thrown))
-                 ((not (eq error-thrown nil))
-                  ;; Generic error-handler meant to provide useful
-                  ;; information about failure cases not otherwise
-                  ;; explicitly specified.
-                  (org-gcal--notify
-                   (concat "Status code: " (number-to-string status-code))
-                   (pp-to-string error-thrown))
-                  (error "Got error %S: %S" status-code error-thrown))
-                 ;; Fetch was successful. Return the list of events retrieved for
-                 ;; further processing.
-                 (t
-                  (setf (alist-get calendar-id page-token nil nil #'equal)
-                        (plist-get data :nextPageToken))
-                  (let ((next-sync-token (plist-get data :nextSyncToken)))
-                    (when next-sync-token
-                      (puthash calendar-id
-                               (list
-                                ;; The first element is the expiration time of
-                                ;; the sync token. Note that, if the expiration
-                                ;; time already exists, we don't update it. We
-                                ;; want to expire the token according to the
-                                ;; time of the previous full sync.
-                                (or
-                                 (car (gethash calendar-id
-                                               org-gcal--sync-tokens))
-                                 down-time)
-                                next-sync-token)
-                               org-gcal--sync-tokens)))
-                  (org-gcal--filter (plist-get data :items)))))))
-          ;; Iterate over all events. For previously unretrieved events, add
-          ;; them to the bottom of the file. For retrieved events, just collect
-          ;; them into a list and pass to the next step.
-          (deferred:nextc it
-            (lambda (events)
-              (with-current-buffer (find-file-noselect calendar-file)
-                (goto-char (point-max))
-                (cl-loop
-                 for event across events
-                 if
-                 (let* ((entry-id (org-gcal--format-entry-id
-                                   calendar-id (plist-get event :id)))
-                        (marker (org-gcal--id-find entry-id 'markerp)))
-                   (cond
-                    (marker
-                     (org-gcal--event-entry-create
-                      :entry-id entry-id
-                      :marker marker
-                      :event event))
-                    ;; If event doesn’t already exist and is outside of the
-                    ;; range [‘org-gcal-up-days’, ‘org-gcal-down-days’], ignore
-                    ;; it. This is necessary because when called with
-                    ;; "syncToken", the Calendar API will return all events
-                    ;; changed on the calendar, without respecting
-                    ;; ‘org-gcal-up-days’ or ‘org-gcal-down-days’, which means
-                    ;; repeated events far in the future will be downloaded.
-                    ((or
-                      (time-less-p (org-gcal--parse-calendar-time
-                                    (plist-get event :start))
-                                   up-time)
-                      (time-less-p down-time
-                                   (org-gcal--parse-calendar-time
-                                    (plist-get event :end))))
-                     nil)
-                    (t
-                     ;; Otherwise, insert a new entry into the
-                     ;; default fetch file.
-                     (insert "\n* ")
-                     (org-gcal--update-entry calendar-id event)
-                     nil)))
-                 collect it))))
-          ;; Find already retrieved entries and update them. This will update
-          ;; events that have been moved from the default fetch file.
-          (deferred:nextc it
-            (lambda (entries)
-              (deferred:loop entries
-                (lambda (entry)
-                  (deferred:$
-                    (let ((marker (or (org-gcal--event-entry-marker entry)
-                                      (org-gcal--id-find (org-gcal--event-entry-entry-id entry))))
-                          (event (org-gcal--event-entry-event entry)))
-                      (org-with-point-at marker
-                        ;; If skipping exports, just overwrite current entry's
-                        ;; calendar data with what's been retrieved from the
-                        ;; server. Otherwise, sync the entry at the current
-                        ;; point.
-                        (set-marker marker nil)
-                        (if (and skip-export event)
-                            (progn
-                              (org-gcal--update-entry calendar-id event)
-                              (deferred:succeed nil))
-                          (org-gcal-post-at-point nil skip-export))))
-                    ;; Log but otherwise ignore errors.
-                    (deferred:error it
-                      (lambda (err)
-                        (message "org-gcal-sync: error: %s" err))))))))
-          ;; Retrieve the next page of results if needed.
-          (deferred:nextc it
-            (lambda (_)
-              (if (alist-get calendar-id page-token nil nil #'equal)
-                  (org-gcal-sync a-token skip-export silent
-                                 page-token up-time down-time)
-                (deferred:succeed nil))))
+          (org-gcal--sync-calendar calendar-id-file skip-export silent
+                                   up-time down-time)
           (deferred:nextc it
             (lambda (_)
               (unless silent
                 (org-gcal--notify "Completed event fetching ."
-                                  (concat "Events fetched into\n" calendar-file)))
+                                  (concat "Events fetched into\n"
+                                          (cdr calendar-id-file))))
               (deferred:succeed nil))))))))
+
+(defun org-gcal--sync-calendar (calendar-id-file skip-export silent
+                                up-time down-time)
+  "Sync events for CALENDAR-ID-FILE
+
+CALENDAR-ID-FILE is a cons in ‘org-gcal-fetch-file-alist’, for which see."
+  (let* (
+         ;; Need to add a dummy value to the beginning of the list to generate a
+         ;; unique list that can be modified in
+         ;; ‘org-gcal--sync-calendar-events’. Later we’ll strip this first
+         ;; element.
+         (parent-events (list 'dummy)))
+    (deferred:$
+      (org-gcal--sync-calendar-events
+       calendar-id-file skip-export silent nil up-time down-time parent-events)
+      (deferred:nextc it
+        (lambda (_)
+          (deferred:loop
+            ;; Strip dummy first element and remove duplicates
+            (cl-remove-duplicates (cdr parent-events) :test #'string=)
+            (lambda (parent-event-id)
+              (deferred:$
+                (org-gcal--sync-event
+                 calendar-id-file parent-event-id skip-export)
+                (org-gcal--sync-instances
+                 calendar-id-file parent-event-id skip-export silent nil
+                 up-time down-time)))))))))
+
+(defun org-gcal--sync-calendar-events
+    (calendar-id-file skip-export silent page-token up-time down-time
+     parent-events)
+  "Sync events for CALENDAR-ID-FILE
+
+CALENDAR-ID-FILE is a cons in ‘org-gcal-fetch-file-alist’, for which see."
+  (let* ((calendar-id (car calendar-id-file))
+         (calendar-file (cdr calendar-id-file))
+         (page-token-cons '(dummy)))
+    (deferred:$
+      (org-gcal--sync-request-events calendar-id page-token up-time down-time)
+      (deferred:nextc it
+        (lambda (response)
+          (let ((retry-fn
+                 (lambda ()
+                   (org-gcal--sync-calendar-events
+                    calendar-id-file skip-export silent page-token
+                    up-time down-time parent-events))))
+            (org-gcal--sync-handle-response
+             response calendar-id-file page-token-cons down-time retry-fn))))
+      (deferred:nextc it
+        (lambda (events)
+          (org-gcal--sync-handle-events calendar-id calendar-file
+                                        events nil up-time down-time
+                                        parent-events)))
+      (deferred:nextc it
+        (lambda (entries)
+          (org-gcal--sync-update-entries calendar-id entries skip-export)))
+      ;; Retrieve the next page of results if needed.
+      (deferred:nextc it
+        (lambda (_)
+          (let ((pt (car (last page-token-cons))))
+            (if pt
+                (org-gcal--sync-calendar-events
+                 calendar-id-file skip-export silent pt
+                 up-time down-time parent-events)
+              (deferred:succeed nil))))))))
+
+(defun org-gcal--sync-instances
+    (calendar-id-file parent-event-id skip-export silent page-token
+                      up-time down-time)
+  "Sync instances of instances of recurring event PARENT-EVENT-ID.
+
+CALENDAR-ID-FILE is a cons in ‘org-gcal-fetch-file-alist’, for which see."
+  (let* ((calendar-id (car calendar-id-file))
+         (calendar-file (cdr calendar-id-file))
+         (page-token-cons '(dummy)))
+    (deferred:$
+      (org-gcal--sync-request-instances calendar-id parent-event-id
+                                        up-time down-time page-token)
+      (deferred:nextc it
+        (lambda (response)
+          (let ((retry-fn
+                 (lambda ()
+                   (org-gcal--sync-instances
+                    calendar-id-file parent-event-id skip-export silent
+                    page-token up-time down-time))))
+            (org-gcal--sync-handle-response
+             response calendar-id-file page-token-cons down-time retry-fn))))
+      (deferred:nextc it
+        (lambda (events)
+          (org-gcal--sync-handle-events calendar-id calendar-file
+                                        events t up-time down-time nil)))
+      (deferred:nextc it
+        (lambda (entries)
+          (org-gcal--sync-update-entries calendar-id entries skip-export)))
+      ;; Retrieve the next page of results if needed.
+      (deferred:nextc it
+        (lambda (_)
+          (let ((pt (car (last page-token-cons))))
+            (if pt
+                (org-gcal--sync-instances
+                 calendar-id-file parent-event-id skip-export silent
+                 pt up-time down-time)
+              (deferred:succeed nil))))))))
+
+(defun org-gcal--sync-event
+    (calendar-id-file event-id skip-export)
+  "Sync a single event given by EVENT-ID
+
+CALENDAR-ID-FILE is a cons in ‘org-gcal-fetch-file-alist’, for which see."
+  (let* ((calendar-id (car calendar-id-file))
+         (calendar-file (cdr calendar-id-file)))
+
+    (deferred:$
+      (org-gcal--get-event calendar-id event-id)
+      (deferred:nextc it
+        (lambda (event) (vector (request-response-data event))))
+      (deferred:nextc it
+        (lambda (events)
+          (org-gcal--sync-handle-events calendar-id calendar-file
+                                        events nil nil nil nil)))
+      (deferred:nextc it
+        (lambda (entries)
+          (org-gcal--sync-update-entries calendar-id entries skip-export))))))
+
+(defun org-gcal--sync-request-events
+    (calendar-id page-token up-time down-time)
+  "Request events on CALENDAR-ID, using PAGE-TOKEN if present."
+  (request-deferred
+   (org-gcal-events-url calendar-id)
+   :type "GET"
+   :headers
+   `(("Accept" . "application/json")
+     ("Authorization" . ,(format "Bearer %s" (org-gcal--get-access-token))))
+   :params
+   (append
+    `(("access_token" . ,(org-gcal--get-access-token))
+      ("singleEvents" . "True"))
+    (seq-let [expires sync-token]
+        ;; Ensure ‘gethash’ return value is actually a list before
+        ;; passing to ‘seq-let’.
+        (when-let
+            ((x (gethash calendar-id org-gcal--sync-tokens))
+             ((listp x)))
+          x)
+      (cond
+       ;; Don't use the sync token if it's expired.
+       ((and expires sync-token
+             (time-less-p (current-time) expires))
+        `(("syncToken" . ,sync-token)))
+       (t
+        (remhash calendar-id org-gcal--sync-tokens)
+        `(("timeMin" . ,(org-gcal--format-time2iso up-time))
+          ("timeMax" . ,(org-gcal--format-time2iso down-time))))))
+    (when page-token `(("pageToken" . ,page-token))))
+   :parser 'org-gcal--json-read))
+
+(defun org-gcal--sync-request-instances
+    (calendar-id event-id up-time down-time page-token)
+  "Request instances of recurring event EVENT-ID on CALENDAR-ID."
+  (request-deferred
+   (org-gcal-instances-url calendar-id event-id)
+   :type "GET"
+   :headers
+   `(("Accept" . "application/json")
+     ("Authorization" . ,(format "Bearer %s" (org-gcal--get-access-token))))
+   :params
+   (append
+    `(("access_token" . ,(org-gcal--get-access-token))
+      ("timeMin" . ,(org-gcal--format-time2iso up-time))
+      ("timeMax" . ,(org-gcal--format-time2iso down-time)))
+    (when page-token `(("pageToken" . ,page-token))))
+   :parser 'org-gcal--json-read))
+
+(defun org-gcal--sync-handle-response
+    (response calendar-id-file page-token-cons down-time retry-fn)
+  "Handle RESPONSE in ‘org-gcal--sync-calendar' for CALENDAR-ID-FILE.
+
+Update PAGE-TOKEN from the response, and return a ‘deferred’ list of event
+objects for further processing."
+  (let
+      ((data (request-response-data response))
+       (status-code (request-response-status-code response))
+       (error-thrown (request-response-error-thrown response))
+       (calendar-id (car calendar-id-file)))
+    (cond
+     ;; If there is no network connectivity, the response will
+     ;; not include a status code.
+     ((eq status-code nil)
+      (org-gcal--notify
+       "Got Error"
+       "Could not contact remote service. Please check your network connectivity.")
+      (error "Got error %S: %S" status-code error-thrown))
+     ((eq 401 (or (plist-get (plist-get (request-response-data response) :error) :code)
+                  status-code))
+      (org-gcal--notify
+       "Received HTTP 401"
+       "OAuth token expired. Now trying to refresh-token")
+      (deferred:$
+        (org-gcal--refresh-token)
+        (deferred:nextc it
+          (lambda (_unused)
+            (funcall retry-fn)))))
+     ((eq 403 status-code)
+      (org-gcal--notify "Received HTTP 403"
+                        "Ensure you enabled the Calendar API through the Developers Console, then try again.")
+      (error "Got error %S: %S" status-code error-thrown))
+     ((eq 410 status-code)
+      (org-gcal--notify "Received HTTP 410"
+                        "Calendar API sync token expired - performing full sync.")
+      (remhash calendar-id org-gcal--sync-tokens)
+      (funcall retry-fn))
+     ;; We got some 2xx response, but for some reason no
+     ;; message body.
+     ((and (> 299 status-code) (eq data nil))
+      (org-gcal--notify
+       (concat "Received HTTP" (number-to-string status-code))
+       "Error occured, but no message body.")
+      (error "Got error %S: %S" status-code error-thrown))
+     ((not (eq error-thrown nil))
+      ;; Generic error-handler meant to provide useful
+      ;; information about failure cases not otherwise
+      ;; explicitly specified.
+      (org-gcal--notify
+       (concat "Status code: " (number-to-string status-code))
+       (pp-to-string error-thrown))
+      (error "Got error %S: %S" status-code error-thrown))
+     ;; Fetch was successful. Return the list of events retrieved for
+     ;; further processing.
+     (t
+      (nconc page-token-cons (list (plist-get data :nextPageToken)))
+      (let ((next-sync-token (plist-get data :nextSyncToken)))
+        (when next-sync-token
+          (puthash calendar-id
+                   (list
+                    ;; The first element is the expiration time of
+                    ;; the sync token. Note that, if the expiration
+                    ;; time already exists, we don't update it. We
+                    ;; want to expire the token according to the
+                    ;; time of the previous full sync.
+                    (or
+                     (car (gethash calendar-id
+                                   org-gcal--sync-tokens))
+                     down-time)
+                    next-sync-token)
+                   org-gcal--sync-tokens)))
+      (org-gcal--filter (plist-get data :items))))))
+
+(defun org-gcal--sync-handle-events
+    (calendar-id calendar-file events recurring-instances? up-time down-time
+     parent-events)
+  "Handle a list of EVENTS fetched from the Calendar API.
+
+CALENDAR-ID and CALENDAR-FILE are defined in ‘org-gcal--sync-inner'.
+RECURRING-INSTANCES? is t if we’re currently fetching instances of recurring
+events and nil otherwise.
+
+Any parent recurring events are appended in-place to the list PARENT-EVENTS."
+  (with-current-buffer (find-file-noselect calendar-file)
+    (goto-char (point-max))
+    (cl-loop
+     for event across events
+     if
+     (let* ((entry-id (org-gcal--format-entry-id
+                       calendar-id (plist-get event :id)))
+            (marker (org-gcal--id-find entry-id 'markerp)))
+       (when (plist-get event :recurrence)
+         (nconc parent-events (list
+                               (org-gcal--event-id-from-entry-id entry-id))))
+       (cond
+        ;; Ignore event entirely if it is an instance of a recurring event
+        ;; unless we’re currently fetching
+        ;; instances of recurring events (i.e., RECURRING-INSTANCES? is
+        ;; non-nil).
+        ((and (not recurring-instances?)
+              (plist-get event :recurringEventId))
+         (nconc parent-events
+                (list
+                 (plist-get event :recurringEventId)))
+         nil)
+        ;; If event is present, collect it for later processing.
+        (marker
+         (org-gcal--event-entry-create
+          :entry-id entry-id
+          :marker marker
+          :event event))
+        ;; If event doesn’t already exist and is outside of the
+        ;; range [‘org-gcal-up-days’, ‘org-gcal-down-days’], ignore
+        ;; it. This is necessary because when called with
+        ;; "syncToken", the Calendar API will return all events
+        ;; changed on the calendar, without respecting
+        ;; ‘org-gcal-up-days’ or ‘org-gcal-down-days’, which means
+        ;; repeated events far in the future will be downloaded.
+        ((and
+          up-time down-time
+          (or
+           (time-less-p (org-gcal--parse-calendar-time
+                         (plist-get event :start))
+                        up-time)
+           (time-less-p down-time
+                        (org-gcal--parse-calendar-time
+                         (plist-get event :end)))))
+         nil)
+        ;; When fetching instances of recurring events that are not yet
+        ;; present, insert them below their parent events, if the parent event
+        ;; exists.
+        (recurring-instances?
+         (let* ((parent-id (org-gcal--format-entry-id
+                            calendar-id (plist-get event :recurringEventId)))
+                (parent-marker
+                 (when parent-id (org-gcal--id-find parent-id 'markerp))))
+           (when parent-marker
+             (atomic-change-group
+               (org-with-point-at parent-marker
+                 (org-insert-heading-respect-content 'invisible-ok)
+                 (org-demote)
+                 (org-gcal--update-entry calendar-id event)))
+             nil)))
+        ;; Don't insert instances of cancelled events that haven't already been
+        ;; fetched.
+        ((string= "cancelled" (plist-get event :status))
+         nil)
+        (t
+         ;; Otherwise, insert a new entry into the
+         ;; default fetch file.
+         (atomic-change-group
+           (insert "\n* ")
+           (org-gcal--update-entry calendar-id event))
+         nil)))
+     collect it)))
+
+(defun org-gcal--sync-update-entries (calendar-id entries skip-export)
+  "Update headlines given by ‘org-gcal--event-entry’ ENTRIES.
+
+Find already retrieved entries and update them. This will update events that
+have been moved from the default fetch file.  CALENDAR-ID is defined in
+‘org-gcal--sync-inner'."
+  (deferred:$
+    (deferred:loop entries
+      (lambda (entry)
+        (deferred:$
+          (let ((marker (or (org-gcal--event-entry-marker entry)
+                            (org-gcal--id-find (org-gcal--event-entry-entry-id entry))))
+                (event (org-gcal--event-entry-event entry)))
+            (org-with-point-at marker
+              ;; If skipping exports, just overwrite current entry's
+              ;; calendar data with what's been retrieved from the
+              ;; server. Otherwise, sync the entry at the current
+              ;; point.
+              (set-marker marker nil)
+              (if (and skip-export event)
+                  (progn
+                    (org-gcal--update-entry calendar-id event)
+                    (deferred:succeed nil))
+                (org-gcal-post-at-point nil skip-export))))
+          ;; Log but otherwise ignore errors.
+          (deferred:error it
+            (lambda (err)
+              (message "org-gcal-sync: error: %s" err))))))
+    (deferred:succeed nil)))
 
 ;;;###autoload
 (defun org-gcal-fetch ()
   "Fetch event data from google calendar."
   (interactive)
-  (org-gcal-sync nil t))
+  (org-gcal-sync t))
 
 ;;;###autoload
-(defun org-gcal-sync-buffer (&optional _a-token skip-export silent)
+(defun org-gcal-sync-buffer (&optional skip-export silent)
   "\
 Sync entries containing Calendar events in the currently-visible portion of the
 buffer.
 
-Uses access token A-TOKEN if non-nil.
 Updates events on the server unless SKIP-EXPORT is set. In this case, events
 modified on the server will overwrite entries in the buffer.
 Set SILENT to non-nil to inhibit notifications."
@@ -484,12 +672,12 @@ Set SILENT to non-nil to inhibit notifications."
           (deferred:succeed nil))))))
 
 ;;;###autoload
-(defun org-gcal-fetch-buffer (&optional _a-token _skip-export _silent)
+(defun org-gcal-fetch-buffer (&optional _skip-export _silent)
   "\
 Fetch changes to events in the currently-visible portion of the buffer, not
 writing any changes to Calendar."
   (interactive)
-  (org-gcal-sync-buffer nil t))
+  (org-gcal-sync-buffer t))
 
 (defun org-gcal--filter (items)
   "Filter ITEMS on an AND of `org-gcal-fetch-event-filters' functions.
@@ -607,8 +795,11 @@ canonical ID, so that existing links won’t be broken."
     (match-string 1 entry-id)))
 
 (defun org-gcal--format-entry-id (calendar-id event-id)
-  "Format CALENDAR-ID and ENTRY-ID into a canonical ID for an Org mode entry."
-  (format "%s/%s" event-id calendar-id))
+  "Format CALENDAR-ID and ENTRY-ID into a canonical ID for an Org mode entry.
+
+Return nil if either argument is nil."
+  (when (and calendar-id event-id)
+    (format "%s/%s" event-id calendar-id)))
 
 (defun org-gcal--back-to-heading ()
   "\
@@ -682,8 +873,8 @@ not present."
           (plist-get (cadr tobj) :day-end)
           (plist-get (cadr tobj) :hour-end)
           (plist-get (cadr tobj) :minute-end)
-          (when (plist-get (cadr tobj) :hour-end) t))))
-      (list :start start :end end :desc desc))))
+          (when (plist-get (cadr tobj) :hour-end) t)))))
+    (list :start start :end end :desc desc)))
 
 ;;;###autoload
 (defun org-gcal-post-at-point (&optional skip-import skip-export)
@@ -711,6 +902,7 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
            (elem (org-element-headline-parser (point-max) t))
            (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
            (loc (org-entry-get (point) "LOCATION"))
+           (recurrence (org-entry-get (point) "recurrence"))
            (event-id (org-gcal--event-id-from-entry-id
                       (org-entry-get (point) "ID")))
            (etag (org-entry-get (point) org-gcal-etag-property))
@@ -749,6 +941,8 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
                  (end-time (time-add start-time duration-seconds)))
             (setq start (org-gcal--format-time2iso start-time)
                   end (org-gcal--format-time2iso end-time))))
+        (when recurrence
+          (setq start nil end nil))
         (org-gcal--post-event start end smry loc desc calendar-id marker etag
                               event-id nil skip-import skip-export)))))
 
@@ -1114,10 +1308,15 @@ an error will be thrown. Point is not preserved."
                            :date))
          (start (if stime stime sday))
          (end   (if etime etime eday))
+         (old-time-desc (org-gcal--get-time-and-desc))
+         (old-start (plist-get old-time-desc :start))
+         (old-end (plist-get old-time-desc :start))
+         (recurrence (plist-get event :recurrence))
          (elem))
     (when loc (replace-regexp-in-string "\n" ", " loc))
     (org-edit-headline smry)
     (org-entry-put (point) org-gcal-etag-property etag)
+    (when recurrence (org-entry-put (point) "recurrence" (format "%s" recurrence)))
     (when loc (org-entry-put (point) "LOCATION" loc))
     (when meet
       (org-entry-put
@@ -1149,6 +1348,10 @@ an error will be thrown. Point is not preserved."
     (newline)
     (insert (format ":%s:" org-gcal-drawer-name))
     (newline)
+    ;; Keep existing timestamps for parent recurring events.
+    (when (and recurrence old-start old-end)
+      (setq start old-start
+            end old-end))
     (let*
         ((timestamp
           (if (or (string= start end) (org-gcal--alldayp start end))
@@ -1170,7 +1373,7 @@ an error will be thrown. Point is not preserved."
                            end
                          (org-gcal--iso-previous-day end))))))))
       (if (org-element-property :scheduled elem)
-          (org-schedule nil timestamp)
+          (unless (and recurrence old-start) (org-schedule nil timestamp))
         (insert timestamp)
         (newline)
         (when desc (newline))))
@@ -1227,10 +1430,12 @@ an error will be thrown. Point is not preserved."
                              seconds))))))
 
 (defun org-gcal--param-date (str)
-  (if (< 11 (length str)) "dateTime" "date"))
+  (and str
+       (if (< 11 (length str)) "dateTime" "date")))
 
 (defun org-gcal--param-date-alt (str)
-  (if (< 11 (length str)) "date" "dateTime"))
+  (and str
+       (if (< 11 (length str)) "dateTime" "date")))
 
 (defun org-gcal--get-calendar-id-of-buffer ()
   "Find calendar id of current buffer."
@@ -1241,18 +1446,18 @@ an error will be thrown. Point is not preserved."
                           "please check/configure `org-gcal-fetch-file-alist'")
                   (buffer-name))))
 
-(defun org-gcal--get-event (calendar-id event-id &optional a-token)
+(defun org-gcal--get-event (calendar-id event-id)
   "\
 Retrieves a Google Calendar event given a CALENDAR-ID and EVENT-ID. If the
 access token A-TOKEN is not specified, it is loaded from the token file.
 
 Returns a ‘deferred’ function that on success returns a ‘request-response‘
 object."
-  (let ((a-token (or a-token (org-gcal--get-access-token))))
+  (let ((a-token (org-gcal--get-access-token)))
     (deferred:$
       (request-deferred
        (concat
-        (format org-gcal-events-url calendar-id)
+        (org-gcal-events-url calendar-id)
         (concat "/" event-id))
        :type "GET"
        :headers
@@ -1282,7 +1487,7 @@ object."
                 (org-gcal--refresh-token)
                 (deferred:nextc it
                   (lambda (_unused)
-                    (org-gcal--get-event calendar-id event-id nil)))))
+                    (org-gcal--get-event calendar-id event-id)))))
              ;; Generic error-handler meant to provide useful information about
              ;; failure cases not otherwise explicitly specified.
              ((not (eq error-thrown nil))
@@ -1313,7 +1518,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
       (deferred:$
         (request-deferred
          (concat
-          (format org-gcal-events-url calendar-id)
+          (org-gcal-events-url calendar-id)
           (when (and event-id etag)
             (concat "/" event-id)))
          :type (if event-id "PATCH" "POST")
@@ -1328,13 +1533,18 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                     (t
                      `(("If-Match" . ,etag)))))
          :data (encode-coding-string
-                (json-encode `(("start" (,stime . ,start) (,stime-alt . nil))
-                               ("end" (,etime . ,(if (equal "date" etime)
-                                                     (org-gcal--iso-next-day end)
-                                                   end)) (,etime-alt . nil))
-                               ("summary" . ,smry)
-                               ("location" . ,loc)
-                               ("description" . ,desc)))
+                (json-encode
+                 (append
+                  `(("summary" . ,smry)
+                    ("location" . ,loc)
+                    ("description" . ,desc))
+                  (if (and start end)
+                      `(("start" (,stime . ,start) (,stime-alt . nil))
+                        ("end" (,etime . ,(if (equal "date" etime)
+                                              (org-gcal--iso-next-day end)
+                                            end))
+                         (,etime-alt . nil)))
+                    nil)))
                 'utf-8)
          :parser 'org-gcal--json-read)
         (deferred:nextc it
@@ -1372,7 +1582,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                    "Received HTTP 412"
                    "ETag stale - will overwrite this entry with event from server.")
                   (deferred:$
-                    (org-gcal--get-event calendar-id event-id a-token)
+                    (org-gcal--get-event calendar-id event-id)
                     (deferred:nextc it
                       (lambda (response)
                         (save-excursion
@@ -1422,7 +1632,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
       (deferred:$
         (request-deferred
          (concat
-          (format org-gcal-events-url calendar-id)
+          (org-gcal-events-url calendar-id)
           (concat "/" event-id))
          :type "DELETE"
          :headers (append
@@ -1470,7 +1680,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                  "Received HTTP 412"
                  "ETag stale - will overwrite this entry with event from server.")
                 (deferred:$
-                  (org-gcal--get-event calendar-id event-id a-token)
+                  (org-gcal--get-event calendar-id event-id)
                   (deferred:nextc it
                     (lambda (response)
                       (save-excursion
