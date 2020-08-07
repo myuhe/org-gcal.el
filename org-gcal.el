@@ -153,6 +153,19 @@ Note that whether a headline is removed is still controlled by
   :group 'org-gcal
   :type 'boolean)
 
+(defcustom org-gcal-recurring-events-mode 'top-level
+  "How to treat instances of recurring events not already fetched.
+
+- ‘top-level’: insert all instances at the top level of the appropriate file for
+  the calendar ID in ‘org-gcal-fetch-file-alist’.
+- ‘nested’: insert instances of a recurring event under the Org-mode headline
+  containing the parent event. If a headline for the parent event doesn’t exist,
+  it will be created."
+  :group 'org-gcal
+  :type '(choice
+          (const :tag "Insert at top level" 'top-level)
+          (const :tag "Insert under headline for parent event" 'nested)))
+
 (defcustom org-gcal-calendar-id-property "calendar-id"
   "\
 Org-mode property on org-gcal entries that records the Calendar ID."
@@ -264,12 +277,13 @@ CALENDAR-ID-FILE is a cons in ‘org-gcal-fetch-file-alist’, for which see."
             ;; Strip dummy first element and remove duplicates
             (cl-remove-duplicates (cdr parent-events) :test #'string=)
             (lambda (parent-event-id)
-              (deferred:$
-                (org-gcal--sync-event
-                 calendar-id-file parent-event-id skip-export)
-                (org-gcal--sync-instances
-                 calendar-id-file parent-event-id skip-export silent nil
-                 up-time down-time)))))))))
+              (when (eq org-gcal-recurring-events-mode 'nested)
+                (deferred:$
+                  (org-gcal--sync-event
+                   calendar-id-file parent-event-id skip-export)
+                  (org-gcal--sync-instances
+                   calendar-id-file parent-event-id skip-export silent nil
+                   up-time down-time))))))))))
 
 (defun org-gcal--sync-calendar-events
     (calendar-id-file skip-export silent page-token up-time down-time
@@ -516,7 +530,8 @@ Any parent recurring events are appended in-place to the list PARENT-EVENTS."
         ;; unless we’re currently fetching
         ;; instances of recurring events (i.e., RECURRING-INSTANCES? is
         ;; non-nil).
-        ((and (not recurring-instances?)
+        ((and (eq org-gcal-recurring-events-mode 'nested)
+              (not recurring-instances?)
               (plist-get event :recurringEventId))
          (nconc parent-events
                 (list

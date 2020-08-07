@@ -214,6 +214,45 @@ delete the corresponding Org mode headlines:
 
 Modify =org-gcal-notify-p= from =t= to =nil=
 
+** Collect instances of recurring events under parent event
+
+By default, =org-gcal-recurring-events-mode= is set to ='top-level=, which means
+that new fetched events that are instances of recurring events will be inserted
+at the top level of the file for the calendar ID configured in
+=org-gcal-fetch-file-alist=:
+
+#+BEGIN_SRC org
+  ,* Meeting
+  SCHEDULED: <2020-08-07 Fri 11:00>
+  ,* Meeting
+  SCHEDULED: <2020-08-14 Fri 11:00>
+  ,* Meeting
+  SCHEDULED: <2020-08-21 Fri 11:00>
+  ,* Meeting
+  SCHEDULED: <2020-08-28 Fri 11:00>
+#+END_SRC
+
+If =org-gcal-recurring-events-mode= is instead set to ='nested=, such events
+will be inserted as Org-mode child headlines under the headline for the parent
+event:
+
+#+BEGIN_SRC org
+  ,* Meeting
+  SCHEDULED: <2017-02-17 Fri 11:00>
+  ,** Meeting
+  SCHEDULED: <2020-08-07 Fri 11:00>
+  ,** Meeting
+  SCHEDULED: <2020-08-14 Fri 11:00>
+  ,** Meeting
+  SCHEDULED: <2020-08-21 Fri 11:00>
+  ,** Meeting
+  SCHEDULED: <2020-08-28 Fri 11:00>
+#+END_SRC
+
+Here the parent meeting has been running for several years, but only the
+instances of the meeting in the range given by =org-gcal-down-days= and
+=org-gcal-up-days= are fetched.
+
 * Errors
 ** Duplicate ID
 
