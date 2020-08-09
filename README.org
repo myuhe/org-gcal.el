@@ -96,8 +96,8 @@ screen that says "This app isn't verify". You will need to click on the
 (require 'org-gcal)
 (setq org-gcal-client-id "your-id-foo.apps.googleusercontent.com"
       org-gcal-client-secret "your-secret"
-      org-gcal-file-alist '(("your-mail@gmail.com" .  "~/schedule.org")
-                            ("another-mail@gmail.com" .  "~/task.org")))
+      org-gcal-fetch-file-alist '(("your-mail@gmail.com" .  "~/schedule.org")
+                                  ("another-mail@gmail.com" .  "~/task.org")))
 #+end_src
 
 ** Multiple accounts
@@ -119,6 +119,82 @@ This will use your existing Emacs installation to generate a value of
 run ~make clean~.
 
 * Usage
+** Getting started
+
+Once you've set up the basic settings (see [[Setting example]]), you can run
+=org-gcal-fetch= to fetch events into the files configured in
+=org-gcal-fetch-file-alist=. After the initial fetch, running =org-gcal-fetch=
+will retrieve newly-created events and update already-fetched events.
+
+To create a Google Calendar event from an Org-mode event, it's enough to run the
+=org-gcal-post-at-point= command on a simple headline:
+
+#+BEGIN_SRC org
+  ,* Event title
+#+END_SRC
+
+This will prompt you for the calendar ID, start time, and end time of the event.
+Therefore, if you'd like to create an event without user interaction (from a
+template, for example), you should set these fields before running
+=org-gcal-post-at-point=:
+
+#+BEGIN_SRC org
+  ,* Event title
+  :PROPERTIES:
+  :calendar-id: jjjjjjjjjjjfuuuk842fdok134@group.calendar.google.com
+  :END:
+  :org-gcal:
+  <2020-07-15 wed 09:15-09:30>
+
+  Event details
+
+  (can be multiple paragraphs).
+  :END:
+#+END_SRC
+
+After the event has been created, some Google Calendar API-specific fields will
+be set for future updates to the event:
+
+#+BEGIN_SRC org
+  ,* Event title
+  :PROPERTIES:
+  :calendar-id: jjjjjjjjjjjfuuuk842fdok134@group.calendar.google.com
+  :ETag:     "7777777777980000"
+  :ID:       xxxxxxxxxxa4jlcj0v998f4u18/jjjjjjjjjjjfuuuk842fdok134@group.calendar.google.com
+  :END:
+  :org-gcal:
+  <2020-07-15 wed 09:15-09:30>
+
+  Event details
+
+  (can be multiple paragraphs).
+  :END:
+#+END_SRC
+
+If you want to schedule the event in your Org Agenda, you can use the SCHEDULED
+property (set by =org-schedule=) instead of storing the date in the =:org-gcal:=
+drawer. The drawer will still be present to contain event details:
+
+#+BEGIN_SRC org
+  ,* Event title
+  SCHEDULED: <2020-07-15 wed 09:15-09:30>
+  :PROPERTIES:
+  :calendar-id: jjjjjjjjjjjfuuuk842fdok134@group.calendar.google.com
+  :ETag:     "7777777777980000"
+  :ID:       xxxxxxxxxxa4jlcj0v998f4u18/jjjjjjjjjjjfuuuk842fdok134@group.calendar.google.com
+  :END:
+  :org-gcal:
+  Event details
+
+  (can be multiple paragraphs).
+  :END:
+#+END_SRC
+
+After editing an event in Org mode, you can also run =org-gcal-post-at-point= to
+update the event on Google Calendar. The command =org-gcal-sync= does what
+=org-gcal-fetch= does, but also runs =org-gcal-post-at-point= on all events that
+you've edited in Org mode to update the corresponding events in Google Calendar.
+
 ** Event structure
 =org-gcal= modifies the following Org-mode properties and drawers when updating
 an event from the Google Calendar API:
@@ -153,6 +229,7 @@ an event from the Google Calendar API:
 
 Apart from these, all other attributes are preserved when an event is updated
 in any way.
+
 ** Commands
 *** =org-gcal-fetch=
    Fetch Google calendar events for all calendar IDs in =org-gcal-file-alist=
