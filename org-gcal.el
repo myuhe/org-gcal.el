@@ -208,8 +208,17 @@ calendar CALENDAR-ID."
   (format "https://www.googleapis.com/calendar/v3/calendars/%s/events/%s/instances"
           calendar-id event-id))
 
+(cl-defstruct (org-gcal--event-entry
+               (:constructor org-gcal--event-entry-create))
+  ;; Entry ID. Created by ‘org-gcal--format-entry-id’.
+  entry-id
+  ;; Optional marker pointing to entry-id.
+  marker
+  ;; Optional Event resource fetched from server.
+  event)
+
 (persist-defvar
- org-gcal--sync-tokens (make-hash-table)
+ org-gcal--sync-tokens nil
  "Storage for Calendar API sync tokens, used for performing incremental sync.
 
 This is a a hash table mapping calendar IDs (as given in
@@ -221,14 +230,13 @@ API.
 Persisted between sessions of Emacs.  To clear sync tokens, call
 ‘org-gcal-sync-tokens-clear’.")
 
-(cl-defstruct (org-gcal--event-entry
-               (:constructor org-gcal--event-entry-create))
-  ;; Entry ID. Created by ‘org-gcal--format-entry-id’.
-  entry-id
-  ;; Optional marker pointing to entry-id.
-  marker
-  ;; Optional Event resource fetched from server.
-  event)
+(defmacro org-gcal--sync-tokens-get (key &optional remove?)
+  "Get KEY from ‘org-gcal--sync-tokens’, or nil if not found.
+
+This is a macro instead of a function so that it can be used as a place
+expression in ‘setf’.  In that case, if REMOVE? is non-nil, the key-value
+pair will be removed instead of set."
+  `(alist-get ,key org-gcal--sync-tokens nil ,remove? #'equal))
 
 ;;;###autoload
 (defun org-gcal-sync (&optional skip-export silent)
@@ -395,10 +403,10 @@ CALENDAR-ID-FILE is a cons in ‘org-gcal-fetch-file-alist’, for which see."
     `(("access_token" . ,(org-gcal--get-access-token))
       ("singleEvents" . "True"))
     (seq-let [expires sync-token]
-        ;; Ensure ‘gethash’ return value is actually a list before
-        ;; passing to ‘seq-let’.
+        ;; Ensure ‘org-gcal--sync-tokens-get’ return value is actually a list
+        ;; before passing to ‘seq-let’.
         (when-let
-            ((x (gethash calendar-id org-gcal--sync-tokens))
+            ((x (org-gcal--sync-tokens-get calendar-id))
              ((listp x)))
           x)
       (cond
@@ -407,7 +415,7 @@ CALENDAR-ID-FILE is a cons in ‘org-gcal-fetch-file-alist’, for which see."
              (time-less-p (current-time) expires))
         `(("syncToken" . ,sync-token)))
        (t
-        (remhash calendar-id org-gcal--sync-tokens)
+        (setf (org-gcal--sync-tokens-get calendar-id 'remove) nil)
         `(("timeMin" . ,(org-gcal--format-time2iso up-time))
           ("timeMax" . ,(org-gcal--format-time2iso down-time))))))
     (when page-token `(("pageToken" . ,page-token))))
@@ -466,7 +474,7 @@ objects for further processing."
      ((eq 410 status-code)
       (org-gcal--notify "Received HTTP 410"
                         "Calendar API sync token expired - performing full sync.")
-      (remhash calendar-id org-gcal--sync-tokens)
+      (setf (org-gcal--sync-tokens-get calendar-id 'remove) nil)
       (funcall retry-fn))
      ;; We got some 2xx response, but for some reason no
      ;; message body.
@@ -489,19 +497,17 @@ objects for further processing."
       (nconc page-token-cons (list (plist-get data :nextPageToken)))
       (let ((next-sync-token (plist-get data :nextSyncToken)))
         (when next-sync-token
-          (puthash calendar-id
-                   (list
-                    ;; The first element is the expiration time of
-                    ;; the sync token. Note that, if the expiration
-                    ;; time already exists, we don't update it. We
-                    ;; want to expire the token according to the
-                    ;; time of the previous full sync.
-                    (or
-                     (car (gethash calendar-id
-                                   org-gcal--sync-tokens))
-                     down-time)
-                    next-sync-token)
-                   org-gcal--sync-tokens)))
+          (setf (org-gcal--sync-tokens-get calendar-id)
+                (list
+                 ;; The first element is the expiration time of
+                 ;; the sync token. Note that, if the expiration
+                 ;; time already exists, we don't update it. We
+                 ;; want to expire the token according to the
+                 ;; time of the previous full sync.
+                 (or
+                  (car (org-gcal--sync-tokens-get calendar-id))
+                  down-time)
+                 next-sync-token))))
       (org-gcal--filter (plist-get data :items))))))
 
 (defun org-gcal--sync-handle-events
@@ -1096,7 +1102,8 @@ Returns a ‘deferred’ object that can be used to wait for completion."
 Use this to force retrieving all events in ‘org-gcal-sync’ or
 ‘org-gcal-fetch’."
   (interactive)
-  (clrhash org-gcal--sync-tokens))
+  (setq org-gcal--sync-tokens nil)
+  (persist-save 'org-gcal--sync-tokens))
 
 ;; Internal
 (defun org-gcal--archive-old-event ()
@@ -1729,6 +1736,11 @@ Returns a ‘deferred’ object that can be used to wait for completion."
 (add-hook 'org-capture-before-finalize-hook 'org-gcal--capture-post)
 
 (defun org-gcal--ensure-token ()
+  "Ensure that access, refresh, and sync token variables in expected state."
+  (unless (org-gcal--sync-tokens-valid)
+    (persist-load 'org-gcal--sync-tokens)
+    (unless (org-gcal--sync-tokens-valid)
+      (org-gcal-sync-tokens-clear)))
   (cond
    (org-gcal-token-plist t)
    ((and (file-exists-p org-gcal-token-file)
@@ -1738,6 +1750,11 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                    (insert-file-contents org-gcal-token-file)
                    (plist-get (read (current-buffer)) :token))))) t)
    (t (deferred:sync! (org-gcal-request-token)))))
+
+(defun org-gcal--sync-tokens-valid ()
+  "Is ‘org-gcal--sync-tokens’ in a valid format?"
+  (and (listp org-gcal--sync-tokens)
+       (json-alist-p org-gcal--sync-tokens)))
 
 (defun org-gcal--timestamp-successor ()
   "Search for the next timestamp object.
