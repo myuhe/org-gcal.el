@@ -1728,12 +1728,17 @@ Returns a ‘deferred’ object that can be used to wait for completion."
         (set-marker marker nil)))))
 
 (defun org-gcal--capture-post ()
-  (dolist (i org-gcal-fetch-file-alist)
-    (when (string=  (file-name-nondirectory (cdr i))
-                    (substring (buffer-name) 8))
-      (org-gcal-post-at-point))))
+    (when (not org-note-abort)
+      (save-excursion
+        (save-window-excursion
+          (let ((inhibit-message t))
+            (org-capture-goto-last-stored))
+          (dolist (i org-gcal-fetch-file-alist)
+            (when (string= (file-name-nondirectory (cdr i))
+                           (buffer-name))
+              (org-gcal-post-at-point)))))))
 
-(add-hook 'org-capture-before-finalize-hook 'org-gcal--capture-post)
+(add-hook 'org-capture-after-finalize-hook 'org-gcal--capture-post)
 
 (defun org-gcal--ensure-token ()
   "Ensure that access, refresh, and sync token variables in expected state."
