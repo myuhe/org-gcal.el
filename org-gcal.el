@@ -579,8 +579,8 @@ Any parent recurring events are appended in-place to the list PARENT-EVENTS."
                (org-with-point-at parent-marker
                  (org-insert-heading-respect-content 'invisible-ok)
                  (org-demote)
-                 (org-gcal--update-entry calendar-id event)))
-             nil)))
+                 (org-gcal--update-entry calendar-id event))))
+           nil))
         ;; Don't insert instances of cancelled events that haven't already been
         ;; fetched.
         ((string= "cancelled" (plist-get event :status))

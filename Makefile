@@ -1,6 +1,6 @@
 EMACS ?= emacs
-SRC=org-gcal.el
-TEST=test/org-gcal-test.el
+SRC=org-gcal.el org-generic-id.el
+TEST=test/org-gcal-test.el test/org-generic-id-test.el
 BUILD_LOG = build.log
 CASK ?= cask
 PKG_DIR := $(shell $(CASK) package-directory)
