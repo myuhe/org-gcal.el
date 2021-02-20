@@ -116,30 +116,30 @@ always located at the beginning of the buffer."
   "Verify that an empty headline is populated correctly from a calendar event
 object."
   (org-gcal-test--with-temp-buffer
-      "* "
-    (org-gcal--update-entry org-gcal-test-calendar-id
-                            org-gcal-test-event)
-    (org-back-to-heading)
-    (let ((elem (org-element-at-point)))
-      (should (equal (org-element-property :title elem)
-                     "My event summary"))
-      (should (equal (org-element-property :ETAG elem)
-                     "\"12344321\""))
-      (should (equal (org-element-property :LOCATION elem)
-                     "Foobar's desk"))
-      (should (equal (org-element-property :CALENDAR-ID elem)
-                     "foo@foobar.com"))
-      (should (equal (org-element-property :ID elem)
-                     "foobar1234/foo@foobar.com")))
-    ;; Check contents of "org-gcal" drawer
-    (re-search-forward ":org-gcal:")
-    (let ((elem (org-element-at-point)))
-      (should (equal (org-element-property :drawer-name elem)
-                     "org-gcal"))
-      (should (equal (buffer-substring-no-properties
-                      (org-element-property :contents-begin elem)
-                      (org-element-property :contents-end elem))
-                     "\
+   "* "
+   (org-gcal--update-entry org-gcal-test-calendar-id
+                           org-gcal-test-event)
+   (org-back-to-heading)
+   (let ((elem (org-element-at-point)))
+     (should (equal (org-element-property :title elem)
+                    "My event summary"))
+     (should (equal (org-element-property :ETAG elem)
+                    "\"12344321\""))
+     (should (equal (org-element-property :LOCATION elem)
+                    "Foobar's desk"))
+     (should (equal (org-element-property :CALENDAR-ID elem)
+                    "foo@foobar.com"))
+     (should (equal (org-element-property :ENTRY-ID elem)
+                    "foobar1234/foo@foobar.com")))
+   ;; Check contents of "org-gcal" drawer
+   (re-search-forward ":org-gcal:")
+   (let ((elem (org-element-at-point)))
+     (should (equal (org-element-property :drawer-name elem)
+                    "org-gcal"))
+     (should (equal (buffer-substring-no-properties
+                     (org-element-property :contents-begin elem)
+                     (org-element-property :contents-end elem))
+                    "\
 <2019-10-06 Sun 17:00-21:00>
 
 My event description
@@ -151,13 +151,13 @@ Second paragraph
   "Verify that an existing headline is populated correctly from a calendar event
 object."
   (org-gcal-test--with-temp-buffer
-      "\
+   "\
 * Old event summary
 :PROPERTIES:
 :ETag:     \"9999\"
 :LOCATION: Somewhere else
 :calendar-id: foo@foobar.com
-:ID:       foobar1234/foo@foobar.com
+:entry-id:       foobar1234/foo@foobar.com
 :END:
 :org-gcal:
 <9999-10-06 Sun 17:00-21:00>
@@ -165,29 +165,29 @@ object."
 Old event description
 :END:
 "
-    (org-gcal--update-entry org-gcal-test-calendar-id
-                            org-gcal-test-event)
-    (org-back-to-heading)
-    (let ((elem (org-element-at-point)))
-      (should (equal (org-element-property :title elem)
-                     "My event summary"))
-      (should (equal (org-element-property :ETAG elem)
-                     "\"12344321\""))
-      (should (equal (org-element-property :LOCATION elem)
-                     "Foobar's desk"))
-      (should (equal (org-element-property :CALENDAR-ID elem)
-                     "foo@foobar.com"))
-      (should (equal (org-element-property :ID elem)
-                     "foobar1234/foo@foobar.com")))
-    ;; Check contents of "org-gcal" drawer
-    (re-search-forward ":org-gcal:")
-    (let ((elem (org-element-at-point)))
-      (should (equal (org-element-property :drawer-name elem)
-                     "org-gcal"))
-      (should (equal (buffer-substring-no-properties
-                      (org-element-property :contents-begin elem)
-                      (org-element-property :contents-end elem))
-                     "\
+   (org-gcal--update-entry org-gcal-test-calendar-id
+                           org-gcal-test-event)
+   (org-back-to-heading)
+   (let ((elem (org-element-at-point)))
+     (should (equal (org-element-property :title elem)
+                    "My event summary"))
+     (should (equal (org-element-property :ETAG elem)
+                    "\"12344321\""))
+     (should (equal (org-element-property :LOCATION elem)
+                    "Foobar's desk"))
+     (should (equal (org-element-property :CALENDAR-ID elem)
+                    "foo@foobar.com"))
+     (should (equal (org-element-property :ENTRY-ID elem)
+                    "foobar1234/foo@foobar.com")))
+   ;; Check contents of "org-gcal" drawer
+   (re-search-forward ":org-gcal:")
+   (let ((elem (org-element-at-point)))
+     (should (equal (org-element-property :drawer-name elem)
+                    "org-gcal"))
+     (should (equal (buffer-substring-no-properties
+                     (org-element-property :contents-begin elem)
+                     (org-element-property :contents-end elem))
+                    "\
 <2019-10-06 Sun 17:00-21:00>
 
 My event description
@@ -208,7 +208,7 @@ Second paragraph
 :ETag:     \"9999\"
 :LOCATION: Somewhere else
 :calendar-id: foo@foobar.com
-:ID:       foobar1234/foo@foobar.com
+:entry-id:       foobar1234/foo@foobar.com
 :END:
 :org-gcal:
 <9999-10-06 Sun 17:00-21:00>
@@ -233,7 +233,7 @@ Old event description
                         "Foobar's desk"))
          (should (equal (org-element-property :CALENDAR-ID elem)
                         "foo@foobar.com"))
-         (should (equal (org-element-property :ID elem)
+         (should (equal (org-element-property :ENTRY-ID elem)
                         "foobar1234/foo@foobar.com")))
        ;; Check contents of "org-gcal" drawer
        (re-search-forward ":org-gcal:")
@@ -267,7 +267,7 @@ Second paragraph
                         "Foobar's desk"))
          (should (equal (org-element-property :CALENDAR-ID elem)
                         "foo@foobar.com"))
-         (should (equal (org-element-property :ID elem)
+         (should (equal (org-element-property :ENTRY-ID elem)
                         "foobar1234/foo@foobar.com")))
        ;; Check contents of "org-gcal" drawer
        (re-search-forward ":org-gcal:")
@@ -307,7 +307,7 @@ Second paragraph
 :ETag:     \"9999\"
 :LOCATION: Somewhere else
 :calendar-id: foo@foobar.com
-:ID:       foobar1234/foo@foobar.com
+:entry-id:       foobar1234/foo@foobar.com
 :END:
 :org-gcal:
 <9999-10-06 Sun 17:00-21:00>
@@ -333,7 +333,7 @@ Old event description
                         "Foobar's desk"))
          (should (equal (org-element-property :CALENDAR-ID elem)
                         "foo@foobar.com"))
-         (should (equal (org-element-property :ID elem)
+         (should (equal (org-element-property :ENTRY-ID elem)
                         "foobar1234/foo@foobar.com")))
        ;; Check contents of "org-gcal" drawer
        (re-search-forward ":org-gcal:")
@@ -369,7 +369,7 @@ Second paragraph
                         "Foobar's desk"))
          (should (equal (org-element-property :CALENDAR-ID elem)
                         "foo@foobar.com"))
-         (should (equal (org-element-property :ID elem)
+         (should (equal (org-element-property :ENTRY-ID elem)
                         "foobar1234/foo@foobar.com")))
        ;; Check contents of "org-gcal" drawer
        (re-search-forward ":org-gcal:")
@@ -408,7 +408,7 @@ SCHEDULED: <9999-10-06 Sun 17:00-21:00>
 :ETag:     \"9999\"
 :LOCATION: Somewhere else
 :calendar-id: foo@foobar.com
-:ID:       foobar1234/foo@foobar.com
+:entry-id:       foobar1234/foo@foobar.com
 :END:
 :org-gcal:
 Old event description
@@ -430,7 +430,7 @@ Old event description
                      "Foobar's desk"))
       (should (equal (org-element-property :CALENDAR-ID elem)
                      "foo@foobar.com"))
-      (should (equal (org-element-property :ID elem)
+      (should (equal (org-element-property :ENTRY-ID elem)
                      "foobar1234/foo@foobar.com")))
     ;; Check contents of "org-gcal" drawer
     (re-search-forward ":org-gcal:")
@@ -454,7 +454,7 @@ Second paragraph
 :PROPERTIES:
 :LOCATION: Somewhere else
 :calendar-id: foo@foobar.com
-:ID:       ABCD-EFGH
+:entry-id:       ABCD-EFGH
 :END:
 :org-gcal:
 <9999-10-06 Sun 17:00-21:00>
@@ -474,11 +474,10 @@ Old event description
                      "Foobar's desk"))
       (should (equal (org-element-property :CALENDAR-ID elem)
                      "foo@foobar.com")))
-    ;; All IDs should be preserved, and the canonical ID should be that
-    ;; generated by org-gcal.
-    (should (equal (org-gcal--all-property-local-values (point) "ID" nil)
-                   '("foobar1234/foo@foobar.com" "ABCD-EFGH")))
-    (should (equal (org-entry-get (point) "ID")
+    ;; The canonical ID should be that generated by org-gcal.
+    (should (equal (org-gcal--all-property-local-values (point) org-gcal-entry-id-property nil)
+                   '("foobar1234/foo@foobar.com")))
+    (should (equal (org-entry-get (point) org-gcal-entry-id-property)
                    '"foobar1234/foo@foobar.com"))
     ;; Check contents of "org-gcal" drawer
     (re-search-forward ":org-gcal:")
@@ -505,6 +504,38 @@ Second paragraph
 :ETag:     \"12344321\"
 :LOCATION: Foobar's desk
 :calendar-id: foo@foobar.com
+:entry-id:       foobar1234/foo@foobar.com
+:END:
+:org-gcal:
+<2019-10-06 Sun 17:00-21:00>
+
+My event description
+
+Second paragraph
+:END:
+"
+    (with-mock
+      (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-generic-id-add-location => nil)
+      (stub org-gcal-request-token => (deferred:succeed nil))
+      (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
+                                  "My event summary" "Foobar's desk"
+                                  "My event description\n\nSecond paragraph"
+                                  "foo@foobar.com"
+                                  * "\"12344321\"" "foobar1234"
+                                  * * *))
+      (org-gcal-post-at-point))))
+
+(ert-deftest org-gcal-test--post-at-point-old-id-property ()
+  "Verify that \":ID:\" property is read for event ID by \
+‘org-gcal-post-to-point’ only if ‘org-gcal-entry-id-property’ is not present."
+  (org-gcal-test--with-temp-buffer
+      "\
+* My event summary
+:PROPERTIES:
+:ETag:     \"12344321\"
+:LOCATION: Foobar's desk
+:calendar-id: foo@foobar.com
 :ID:       foobar1234/foo@foobar.com
 :END:
 :org-gcal:
@@ -517,6 +548,36 @@ Second paragraph
 "
     (with-mock
       (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-generic-id-add-location => nil)
+      (stub org-gcal-request-token => (deferred:succeed nil))
+      (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
+                                  "My event summary" "Foobar's desk"
+                                  "My event description\n\nSecond paragraph"
+                                  "foo@foobar.com"
+                                  * "\"12344321\"" "foobar1234"
+                                  * * *))
+      (org-gcal-post-at-point)))
+  (org-gcal-test--with-temp-buffer
+      "\
+* My event summary
+:PROPERTIES:
+:ETag:     \"12344321\"
+:LOCATION: Foobar's desk
+:calendar-id: foo@foobar.com
+:ID:             hello-world
+:entry-id:       foobar1234/foo@foobar.com
+:END:
+:org-gcal:
+<2019-10-06 Sun 17:00-21:00>
+
+My event description
+
+Second paragraph
+:END:
+"
+    (with-mock
+      (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-generic-id-add-location => nil)
       (stub org-gcal-request-token => (deferred:succeed nil))
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                   "My event summary" "Foobar's desk"
@@ -525,6 +586,7 @@ Second paragraph
                                   * "\"12344321\"" "foobar1234"
                                   * * *))
       (org-gcal-post-at-point))))
+
 
 (ert-deftest org-gcal-test--post-at-point-no-id ()
   "Verify that ‘org-gcal-post-to-point’ doesn't send an ID to Calendar API if
@@ -546,6 +608,7 @@ Second paragraph
 "
     (with-mock
       (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-generic-id-add-location => nil)
       (stub org-gcal-request-token => (deferred:succeed nil))
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                   "My event summary" "Foobar's desk"
@@ -560,7 +623,7 @@ Second paragraph
 :PROPERTIES:
 :LOCATION: Foobar's desk
 :calendar-id: foo@foobar.com
-:ID: ABCD-EFGH
+:entry-id: ABCD-EFGH
 :END:
 :org-gcal:
 <2019-10-06 Sun 17:00-21:00>
@@ -572,6 +635,7 @@ Second paragraph
 "
     (with-mock
       (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-generic-id-add-location => nil)
       (stub org-gcal-request-token => (deferred:succeed nil))
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                   "My event summary" "Foobar's desk"
@@ -593,6 +657,7 @@ org-gcal properties with sane default values."
       (stub org-read-date => (encode-time '(0 0 17 6 10 2019 nil nil t)))
       (stub read-from-minibuffer => "4:00")
       (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-generic-id-add-location => nil)
       (stub org-gcal-request-token => (deferred:succeed nil))
       (mock (org-gcal--post-event "2019-10-06T17:00:00+0000" "2019-10-06T21:00:00+0000"
                                   "My event summary" nil
@@ -615,6 +680,7 @@ CLOCK: [2019-06-06 Thu 17:00]--[2019-06-06 Thu 18:00] => 1:00
       (stub completing-read => "foo@foobar.com")
       (stub org-read-date => (encode-time '(0 0 17 6 10 2019 nil nil t)))
       (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-generic-id-add-location => nil)
       (stub org-gcal-request-token => (deferred:succeed nil))
       (cl-letf
           (((symbol-function #'read-from-minibuffer)
@@ -649,6 +715,7 @@ Second paragraph
 "
     (with-mock
       (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-generic-id-add-location => nil)
       (stub org-gcal-request-token => (deferred:succeed nil))
       (stub request-deferred => (deferred:succeed nil))
       (org-gcal-post-at-point))))
@@ -664,7 +731,7 @@ SCHEDULED: <2019-10-06 Sun 17:00>--<2019-10-07 Mon 21:00>
 :ETag:     \"12344321\"
 :LOCATION: Foobar's desk
 :calendar-id: foo@foobar.com
-:ID:       foobar1234/foo@foobar.com
+:entry-id:       foobar1234/foo@foobar.com
 :END:
 :org-gcal:
 My event description
@@ -674,6 +741,7 @@ Second paragraph
 "
     (with-mock
       (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-generic-id-add-location => nil)
       (stub org-gcal-request-token => (deferred:succeed nil))
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-07T21:00:00Z"
                                   "My event summary" "Foobar's desk"
@@ -696,7 +764,7 @@ SCHEDULED: <2019-10-06 Sun 17:00>--<2019-10-07 Mon 21:00>
 :ETag:     \"12344321\"
 :LOCATION: Foobar's desk
 :calendar-id: foo@foobar.com
-:ID:       foobar1234/foo@foobar.com
+:entry-id:       foobar1234/foo@foobar.com
 :END:
 :org-gcal:
 My event description
@@ -705,31 +773,33 @@ Second paragraph
 :END:
 "))
     (org-gcal-test--with-temp-buffer
-     buf
-     ;; Don’t delete drawer if we don’t receive 200.
-     (with-mock
-      (let ((deferred:debug t))
-        (stub org-gcal--time-zone => '(0 "UTC")))
-      (stub org-gcal-request-token => (deferred:succeed nil)
-            (stub y-or-n-p => t)
-            (stub alert => t)
-            (stub request-deferred =>
-                  (deferred:succeed
-                    (make-request-response
-                     :status-code 500
-                     :error-thrown '(error . nil))))
-            (org-back-to-heading)
-            (deferred:sync!
-              (deferred:$
-                (org-gcal-delete-at-point)
-                (deferred:error it #'ignore)))
-            (org-back-to-heading)
-            (should (re-search-forward ":org-gcal:" nil 'noerror))))
+        buf
+      ;; Don’t delete drawer if we don’t receive 200.
+      (with-mock
+        (let ((deferred:debug t))
+          (stub org-gcal--time-zone => '(0 "UTC")))
+        (stub org-generic-id-add-location => nil)
+        (stub org-gcal-request-token => (deferred:succeed nil))
+        (stub y-or-n-p => t)
+        (stub alert => t)
+        (stub request-deferred =>
+              (deferred:succeed
+                (make-request-response
+                 :status-code 500
+                 :error-thrown '(error . nil))))
+        (org-back-to-heading)
+        (deferred:sync!
+          (deferred:$
+            (org-gcal-delete-at-point)
+            (deferred:error it #'ignore)))
+        (org-back-to-heading)
+        (should (re-search-forward ":org-gcal:" nil 'noerror))))
 
-     ;; Delete drawer if we do receive 200.
-     (with-mock
+    ;; Delete drawer if we do receive 200.
+    (with-mock
       (let ((deferred:debug t))
         (stub org-gcal--time-zone => '(0 "UTC"))
+        (stub org-generic-id-add-location => nil)
         (stub org-gcal-request-token => (deferred:succeed nil))
         (stub y-or-n-p => t)
         (stub request-deferred =>
@@ -741,8 +811,8 @@ Second paragraph
         (org-back-to-heading)
         (should-not (re-search-forward ":org-gcal:" nil 'noerror))))
 
-     ;; Delete the entire entry if configured to
-     (with-mock
+    ;; Delete the entire entry if configured to
+    (with-mock
       (let ((deferred:debug t)
             (org-gcal-remove-api-cancelled-events t))
         (stub org-gcal--time-zone => '(0 "UTC"))
@@ -754,7 +824,7 @@ Second paragraph
                  :status-code 200)))
         (org-back-to-heading)
         (deferred:sync! (org-gcal-delete-at-point))
-        (should (equal (buffer-string) "")))))))
+        (should (equal (buffer-string) ""))))))
 
 (ert-deftest org-gcal-test--ert-fail ()
   "Test handling of ERT failures in deferred code. Should fail."
@@ -768,8 +838,8 @@ Second paragraph
               (lambda (_)
                 (deferred:succeed "Success")))))
     (should (equal
-              (deferred:sync! (request-deferred))
-              "Success"))))
+             (deferred:sync! (request-deferred))
+             "Success"))))
 
 ;;; TODO: Figure out mocking for POST/PATCH followed by GET
 ;;; - ‘mock‘ might work for this - the argument list must be specified up
