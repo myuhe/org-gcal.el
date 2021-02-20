@@ -270,7 +270,8 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                 (org-gcal--notify "Completed event fetching ."
                                   (concat "Events fetched into\n"
                                           (cdr calendar-id-file))))
-              (deferred:succeed nil))))))))
+              (deferred:succeed nil)))))))
+  (org-generic-id-update-id-locations org-gcal-entry-id-property))
 
 (defun org-gcal--sync-calendar (calendar-id-file skip-export silent
                                 up-time down-time)
