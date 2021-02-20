@@ -94,7 +94,7 @@ In any case, the ID of the entry is returned."
        (t nil)))))
 
 ;;;###autoload
-(defun org-generic-id-find (id-prop id &optional markerp cached)
+(defun org-generic-id-find (id-prop id &optional markerp cached no-fallback)
   "Return the location of the entry with property ID-PROP, value ID.
 The return value is a cons cell (file-name . position), or nil
 if there is no entry with that ID.
@@ -103,11 +103,14 @@ With optional argument MARKERP, return the position as a new marker.
 Normally, if an entry with ID is not found, this function will run
 ‘org-generic-id-update-id-locations' in order to pick up any updates to the
 files, and then search again, before concluding an ID can’t be found. If
-CACHED is passed, that function will not be run."
+CACHED is passed, that function will not be run.
+
+Normally the ID will be searched for in the current buffer before updating ID
+locations. This behavior can be disabled with NO-FALLBACK."
   (cond
    ((symbolp id) (setq id (symbol-name id)))
    ((numberp id) (setq id (number-to-string id))))
-  (let ((file (org-generic-id-find-id-file id-prop id))
+  (let ((file (org-generic-id-find-id-file id-prop id no-fallback))
         org-agenda-new-buffers where)
     (when file
       (setq where (org-generic-id-find-id-in-file id-prop id file markerp)))
@@ -328,8 +331,11 @@ is turned into an alist like this:
 ;; Finding entries with specified id
 
 ;;;###autoload
-(defun org-generic-id-find-id-file (id-prop id)
-  "Query the id database for the file in which this ID is located."
+(defun org-generic-id-find-id-file (id-prop id &optional no-fallback)
+  "Query the id database for the file in which this ID is located.
+
+If NO-FALLBACK is set, don’t fall back to current buffer if not found in
+‘org-generic-id-locations’."
   (unless org-generic-id-locations
     (org-generic-id-locations-load))
   (or (and org-generic-id-locations
@@ -339,8 +345,9 @@ is turned into an alist like this:
            (gethash id
                     (gethash id-prop org-generic-id-locations)))
       ;; Fall back on current buffer
-      (buffer-file-name (or (buffer-base-buffer (current-buffer))
-                            (current-buffer)))))
+      (and (not no-fallback)
+           (buffer-file-name (or (buffer-base-buffer (current-buffer))
+                                 (current-buffer)))))
 
 (defun org-generic-id-find-id-in-file (id-prop id file &optional markerp)
   "Return the position of the entry ID in FILE.
