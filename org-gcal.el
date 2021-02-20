@@ -797,8 +797,10 @@ This will also update the stored ID locations using
     (org-gcal--back-to-heading)
     (let ((entry-id (org-gcal--format-entry-id calendar-id event-id)))
       (org-entry-put (point) org-gcal-entry-id-property entry-id)
-      (org-generic-id-add-location org-gcal-entry-id-property entry-id
-                                   (file-truename (buffer-file-name))))))
+      (when-let* ((fname (buffer-file-name))
+                  (truename (file-truename fname)))
+        (org-generic-id-add-location org-gcal-entry-id-property entry-id
+                                     truename)))))
 
 (defun org-gcal--event-id-from-entry-id (entry-id)
   "Parse an ENTRY-ID created by ‘org-gcal--format-entry-id’ and return EVENT-ID."
