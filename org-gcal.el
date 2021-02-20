@@ -251,6 +251,7 @@ pair will be removed instead of set."
 Export the ones to the calendar if unless
 SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
   (interactive)
+  (org-generic-id-update-id-locations org-gcal-entry-id-property)
   (org-gcal--ensure-token)
   (when org-gcal-auto-archive
     (dolist (i org-gcal-fetch-file-alist)
@@ -259,19 +260,23 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
         (org-gcal--archive-old-event))))
   (let ((up-time (org-gcal--up-time))
         (down-time (org-gcal--down-time)))
-    (deferred:loop org-gcal-fetch-file-alist
-      (lambda (calendar-id-file)
-        (deferred:$
-          (org-gcal--sync-calendar calendar-id-file skip-export silent
-                                   up-time down-time)
-          (deferred:nextc it
-            (lambda (_)
-              (unless silent
-                (org-gcal--notify "Completed event fetching ."
-                                  (concat "Events fetched into\n"
-                                          (cdr calendar-id-file))))
-              (deferred:succeed nil)))))))
-  (org-generic-id-update-id-locations org-gcal-entry-id-property))
+    (deferred:$
+      (deferred:loop org-gcal-fetch-file-alist
+        (lambda (calendar-id-file)
+          (deferred:$
+            (org-gcal--sync-calendar calendar-id-file skip-export silent
+                                     up-time down-time)
+            (deferred:nextc it
+              (lambda (_)
+                (unless silent
+                  (org-gcal--notify "Completed event fetching ."
+                                    (concat "Events fetched into\n"
+                                            (cdr calendar-id-file))))
+                (deferred:succeed nil))))))
+      (deferred:nextc it
+        (lambda (_)
+          (org-generic-id-update-id-locations org-gcal-entry-id-property))))))
+
 
 (defun org-gcal--sync-calendar (calendar-id-file skip-export silent
                                 up-time down-time)
