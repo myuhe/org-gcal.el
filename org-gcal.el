@@ -1600,7 +1600,10 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                 (unless skip-import
                   (org-gcal--notify
                    "Received HTTP 412"
-                   "ETag stale - will overwrite this entry with event from server.")
+                   (format "ETag stale for %S\n%s\n\n%s"
+                           smry
+                           (org-gcal--format-entry-id calendar-id event-id)
+                           "Will overwrite this entry with event from server."))
                   (deferred:$
                     (org-gcal--get-event calendar-id event-id)
                     (deferred:nextc it
@@ -1698,7 +1701,9 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                ((eq status-code 412)
                 (org-gcal--notify
                  "Received HTTP 412"
-                 "ETag stale - will overwrite this entry with event from server.")
+                 (format "ETag stale for entry %s\n\n%s"
+                         (org-gcal--format-entry-id calendar-id event-id)
+                         "Will overwrite this entry with event from server."))
                 (deferred:$
                   (org-gcal--get-event calendar-id event-id)
                   (deferred:nextc it
