@@ -196,7 +196,7 @@ When FILES is given, scan also these files."
     (when (and (not silent) (> ndup 0))
       (warn
        "WARNING: %d duplicate :%s: properties found, check *Messages* buffer"
-       id-prop ndup))
+       ndup id-prop))
     (message "%d files scanned, %d files contain IDs, and %d :%s: IDs found."
              nfiles (length org-generic-id-files)
              (hash-table-count (gethash id-prop org-generic-id-locations))
@@ -374,9 +374,5 @@ optional argument MARKERP, return the position as a new marker."
         (unless (or visiting markerp) (kill-buffer buffer)))))))
 
 (provide 'org-generic-id)
-
-;; Local variables:
-;; generated-autoload-file: "org-loaddefs.el"
-;; End:
 
 ;;; org-generic-id.el ends here
