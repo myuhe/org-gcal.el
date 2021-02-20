@@ -254,7 +254,7 @@ When FILES is given, scan also these files."
   "Add the ID with location FILE to the database of ID locations."
   ;; Only when the buffer has a file
   (unless file
-    (error "bug: ‘org-generic-id-get' expects a file-visiting buffer"))
+    (error "bug: ‘org-generic-id-add-locations' expects a file-visiting buffer"))
   (let ((afile (abbreviate-file-name file)))
     (when (and id)
       (unless org-generic-id-locations (org-generic-id-locations-load))
