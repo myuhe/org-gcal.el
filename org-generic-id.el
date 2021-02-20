@@ -116,7 +116,7 @@ locations. This behavior can be disabled with NO-FALLBACK."
       (setq where (org-generic-id-find-id-in-file id-prop id file markerp)))
     (unless (or where cached)
       (org-generic-id-update-id-locations id-prop nil t)
-      (setq file (org-generic-id-find-id-file id-prop id))
+      (setq file (org-generic-id-find-id-file id-prop id no-fallback))
       (when file
         (setq where (org-generic-id-find-id-in-file
                      id-prop id file markerp))))
@@ -347,7 +347,7 @@ If NO-FALLBACK is set, don’t fall back to current buffer if not found in
       ;; Fall back on current buffer
       (and (not no-fallback)
            (buffer-file-name (or (buffer-base-buffer (current-buffer))
-                                 (current-buffer)))))
+                                 (current-buffer))))))
 
 (defun org-generic-id-find-id-in-file (id-prop id file &optional markerp)
   "Return the position of the entry ID in FILE.
