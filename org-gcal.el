@@ -40,6 +40,7 @@
 (require 'org-archive)
 (require 'org-clock)
 (require 'org-element)
+(require 'org-generic-id)
 (require 'org-id)
 (require 'parse-time)
 (require 'persist)
@@ -165,6 +166,12 @@ Note that whether a headline is removed is still controlled by
   :type '(choice
           (const :tag "Insert at top level" 'top-level)
           (const :tag "Insert under headline for parent event" 'nested)))
+
+(defcustom org-gcal-entry-id-property "entry-id"
+  "\
+Org-mode property on org-gcal entries that records the calendar and event ID."
+  :group 'org-gcal
+  :type 'string)
 
 (defcustom org-gcal-calendar-id-property "calendar-id"
   "\
@@ -739,65 +746,58 @@ Does not preserve point."
           ;; Return final values.
           (and (not (equal value '(nil))) (nreverse value)))))))
 
+(defun org-gcal--id-find (id &optional markerp)
+  "Return the location of the entry with the id ID.
+The return value is a cons cell (file-name . position), or nil
+if there is no entry with that ID.
+With optional argument MARKERP, return the position as a new marker."
+  (or
+    (org-generic-id-find org-gcal-entry-id-property id markerp
+                         'cached 'no-fallback)
+    ;; Fallback for legacy "ID" property. Don’t use ‘org-id-find’ directly
+    ;; because it always run ‘org-id-update-id-locations’ if the ID isn’t found,
+    ;; which slows us down considerably, and tries to fall back to the current
+    ;; buffer, which we don’t want either.
+    (when-let ((file (org-gcal--find-id-file id)))
+      (org-id-find-id-in-file id file markerp))))
+
 (defun org-gcal--find-id-file (id)
   "Query the id database for the file in which this ID is located.
 
 Like ‘org-id-find-id-file’, except that it doesn’t fall back to the current
-buffer if ID is not found in the id database, but instead returns nil."
+buffer if ID is not found in the id database, but instead returns nil.
+
+Only needed for legacy entries that use \"ID\" to store entry IDs."
   (unless org-id-locations (org-id-locations-load))
   (or (and org-id-locations
            (hash-table-p org-id-locations)
            (gethash id org-id-locations))
       nil))
 
-(defun org-gcal--id-find (id &optional markerp)
-  "Return the location of the entry with the id ID.
-The return value is a cons cell (file-name . position), or nil
-if there is no entry with that ID.
-With optional argument MARKERP, return the position as a new marker.
+(defun org-gcal--get-id (pom)
+  "Retrieve an entry ID at point-or-marker POM.
 
-Like ‘org-id-find’, except that it will not attempt to update
-‘org-id-locations’ when an ID is not found."
-  (cond
-   ((symbolp id) (setq id (symbol-name id)))
-   ((numberp id) (setq id (number-to-string id))))
-  (let ((file (org-gcal--find-id-file id))
-        org-agenda-new-buffers where)
-    (when file
-      (setq where (org-id-find-id-in-file id file markerp)))
-    where))
+  Use ‘org-gcal-entry-id-property', or \":ID:\" if not present (for backward
+compatibility)."
+  (org-gcal--event-id-from-entry-id
+   (or (org-entry-get pom org-gcal-entry-id-property)
+       (org-entry-get pom "ID"))))
+
 
 (defun org-gcal--put-id (pom calendar-id event-id)
-  "\
-Store a canonical ID generated from CALENDAR-ID and EVENT-ID in the \":ID:\"
-property at point-or-marker POM.
-The existing \":ID\" entries at POM, if any, will be inserted after the
-canonical ID, so that existing links won’t be broken."
+  "Store a canonical entry ID at point-or-marker POM.
+
+Entry ID is generated from CALENDAR-ID and EVENT-ID and stored in the
+‘org-gcal-entry-id-property'.
+
+This will also update the stored ID locations using
+‘org-generic-id-add-location'."
   (org-with-point-at pom
     (org-gcal--back-to-heading)
-    (let ((ids (org-gcal--all-property-local-values (point) "ID" nil))
-          (entry-id (org-gcal--format-entry-id calendar-id event-id)))
-      ;; First delete all existing IDs and insert canonical ID. This will put
-      ;; it as the first ID in the entry.
-      (org-entry-delete (point) "ID")
-      (org-entry-put (point) "ID" entry-id)
-      (let ((bfn (buffer-file-name (buffer-base-buffer))))
-        (when bfn
-          (org-id-add-location entry-id bfn)))
-      ;; Now find the ID just inserted and insert the other IDs in their
-      ;; original order.
-      (let* ((range (org-get-property-block)))
-        (goto-char (car range))
-        (re-search-forward
-         (org-re-property "ID" nil t) (cdr range) t)
-        ;; See ‘org-re-property’ - match 5 is the end of the line.
-        (goto-char (match-end 5))
-        (let ((indentation (match-string-no-properties 4)))
-          (mapc
-           (lambda (id)
-             (newline)
-             (insert indentation ":ID: " id))
-           (cl-remove-if (lambda (x) (string= x entry-id)) ids)))))))
+    (let ((entry-id (org-gcal--format-entry-id calendar-id event-id)))
+      (org-entry-put (point) org-gcal-entry-id-property entry-id)
+      (org-generic-id-add-location org-gcal-entry-id-property entry-id
+                                   (file-truename (buffer-file-name))))))
 
 (defun org-gcal--event-id-from-entry-id (entry-id)
   "Parse an ENTRY-ID created by ‘org-gcal--format-entry-id’ and return EVENT-ID."
@@ -818,21 +818,21 @@ canonical ID, so that existing links won’t be broken."
 (defun org-gcal--format-entry-id (calendar-id event-id)
   "Format CALENDAR-ID and ENTRY-ID into a canonical ID for an Org mode entry.
 
-Return nil if either argument is nil."
+  Return nil if either argument is nil."
   (when (and calendar-id event-id)
     (format "%s/%s" event-id calendar-id)))
 
 (defun org-gcal--back-to-heading ()
   "\
-Call ‘org-back-to-heading’ with the invisible-ok argument set to true.
-We always intend to go back to the invisible heading here."
+  Call ‘org-back-to-heading’ with the invisible-ok argument set to true.
+  We always intend to go back to the invisible heading here."
   (org-back-to-heading 'invisible-ok))
 
 (defun org-gcal--get-time-and-desc ()
   "Get the timestamp and description of the event at point.
 
-Return a plist with :start, :end, and :desc keys. The value for a key is nil if
-not present."
+  Return a plist with :start, :end, and :desc keys. The value for a key is nil if
+  not present."
   (let (start end desc tobj elem)
     (save-excursion
       (org-gcal--back-to-heading)
@@ -900,13 +900,13 @@ not present."
 ;;;###autoload
 (defun org-gcal-post-at-point (&optional skip-import skip-export)
   "\
-Post entry at point to current calendar. This overwrites the event on the
-server with the data from the entry, except if the ‘org-gcal-etag-property’ is
-present and is out of sync with the server, in which case the entry is
-overwritten with data from the server instead.
+  Post entry at point to current calendar. This overwrites the event on the
+  server with the data from the entry, except if the ‘org-gcal-etag-property’ is
+  present and is out of sync with the server, in which case the entry is
+  overwritten with data from the server instead.
 
-If SKIP-IMPORT is not nil, don’t overwrite the entry with data from the server.
-If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
+  If SKIP-IMPORT is not nil, don’t overwrite the entry with data from the server.
+  If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
   (interactive)
   (org-gcal--ensure-token)
   (save-excursion
@@ -924,8 +924,7 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
            (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
            (loc (org-entry-get (point) "LOCATION"))
            (recurrence (org-entry-get (point) "recurrence"))
-           (event-id (org-gcal--event-id-from-entry-id
-                      (org-entry-get (point) "ID")))
+           (event-id (org-gcal--get-id (point)))
            (etag (org-entry-get (point) org-gcal-etag-property))
            (calendar-id
             (org-entry-get (point) org-gcal-calendar-id-property)))
@@ -982,8 +981,7 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
     (org-gcal--back-to-heading)
     (let* ((marker (point-marker))
            (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
-           (event-id (org-gcal--event-id-from-entry-id
-                      (org-entry-get (point) "ID")))
+           (event-id (org-gcal--get-id (point)))
            (etag (org-entry-get (point) org-gcal-etag-property))
            (calendar-id
             (org-entry-get (point) org-gcal-calendar-id-property)))
@@ -1016,8 +1014,8 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server."
 
 (defun org-gcal-request-authorization ()
   "Request OAuth authorization at AUTH-URL by launching `browse-url'.
-CLIENT-ID is the client id provided by the provider.
-It returns the code provided by the service."
+  CLIENT-ID is the client id provided by the provider.
+  It returns the code provided by the service."
   (browse-url (concat org-gcal-auth-url
                       "?client_id=" (url-hexify-string org-gcal-client-id)
                       "&response_type=code"
@@ -1028,7 +1026,7 @@ It returns the code provided by the service."
 (defun org-gcal-request-token ()
   "Refresh OAuth access at TOKEN-URL.
 
-Returns a ‘deferred’ object that can be used to wait for completion."
+  Returns a ‘deferred’ object that can be used to wait for completion."
   (interactive)
   (deferred:$
     (request-deferred
@@ -1099,8 +1097,8 @@ Returns a ‘deferred’ object that can be used to wait for completion."
 (defun org-gcal-sync-tokens-clear ()
   "Clear all Calendar API sync tokens.
 
-Use this to force retrieving all events in ‘org-gcal-sync’ or
-‘org-gcal-fetch’."
+  Use this to force retrieving all events in ‘org-gcal-sync’ or
+  ‘org-gcal-fetch’."
   (interactive)
   (setq org-gcal--sync-tokens nil)
   (persist-save 'org-gcal--sync-tokens))
@@ -1190,8 +1188,8 @@ Use this to force retrieving all events in ‘org-gcal-sync’ or
 
 (defun org-gcal--safe-substring (string from &optional to)
   "Call the `substring' function safely.
-No errors will be returned for out of range values of FROM and
-TO.  Instead an empty string is returned."
+  No errors will be returned for out of range values of FROM and
+  TO.  Instead an empty string is returned."
   (let* ((len (length string))
          (to (or to len)))
     (when (< from 0)
@@ -1231,7 +1229,7 @@ TO.  Instead an empty string is returned."
 
 (defun org-gcal--parse-calendar-time (time)
   "Parse TIME, the start or end time object from a Calendar API Events \
-resource, into an Emacs time object."
+  resource, into an Emacs time object."
   (let ((date (plist-get time :date))
         (date-time (plist-get time :dateTime)))
     (cond
@@ -1306,10 +1304,10 @@ resource, into an Emacs time object."
 
 (defun org-gcal--update-entry (calendar-id event)
   "\
-Update the entry at the current heading with information from EVENT, which is
-parsed from the Calendar API JSON response using
-‘org-gcal--json-read’. Point must be located on an Org-mode heading line or
-an error will be thrown. Point is not preserved."
+  Update the entry at the current heading with information from EVENT, which is
+  parsed from the Calendar API JSON response using
+  ‘org-gcal--json-read’. Point must be located on an Org-mode heading line or
+  an error will be thrown. Point is not preserved."
   (unless (org-at-heading-p)
     (user-error "Must be on Org-mode heading."))
   (let* ((smry  (or (plist-get event :summary)
@@ -1428,7 +1426,7 @@ an error will be thrown. Point is not preserved."
 
 (defun org-gcal--maybe-remove-entry ()
   "Remove the entry at the current heading, depending on the value of \
-‘org-gcal-remove-api-cancelled-events’."
+  ‘org-gcal-remove-api-cancelled-events’."
   (when-let ((org-gcal-remove-api-cancelled-events)
              (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
              ((or (eq org-gcal-remove-api-cancelled-events t)
@@ -1465,7 +1463,7 @@ an error will be thrown. Point is not preserved."
                if (file-equal-p file (buffer-file-name (buffer-base-buffer)))
                return id)
       (user-error (concat "Buffer `%s' may not related to google calendar; "
-                          "please check/configure `org-gcal-fetch-file-alist'")
+  "please check/configure `org-gcal-fetch-file-alist'")
                   (buffer-name))))
 
 (defun org-gcal--get-event (calendar-id event-id)
