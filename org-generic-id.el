@@ -225,6 +225,7 @@ When FILES is given, scan also these files."
               (print-length nil))
           (pp out (current-buffer)))))))
 
+;;;###autoload
 (defun org-generic-id-locations-load ()
   "Read the data from `org-generic-id-locations-file'."
   (setq org-generic-id-locations nil)
@@ -250,6 +251,7 @@ When FILES is given, scan also these files."
                        org-generic-id-locations)))
   (setq org-generic-id-locations (org-generic-id--locations-alist-to-hash org-generic-id-locations)))
 
+;;;###autoload
 (defun org-generic-id-add-location (id-prop id file)
   "Add the ID with location FILE to the database of ID locations."
   ;; Only when the buffer has a file
@@ -257,7 +259,6 @@ When FILES is given, scan also these files."
     (error "bug: ‘org-generic-id-add-locations' expects a file-visiting buffer"))
   (let ((afile (abbreviate-file-name file)))
     (when (and id)
-      (unless org-generic-id-locations (org-generic-id-locations-load))
       (let ((id-prop-hash (gethash id-prop org-generic-id-locations
                                    (make-hash-table :test 'equal))))
         (puthash id-prop id-prop-hash org-generic-id-locations)
@@ -336,8 +337,6 @@ is turned into an alist like this:
 
 If NO-FALLBACK is set, don’t fall back to current buffer if not found in
 ‘org-generic-id-locations’."
-  (unless org-generic-id-locations
-    (org-generic-id-locations-load))
   (or (and org-generic-id-locations
            (hash-table-p org-generic-id-locations)
            ;; Guard for errors in the ‘gethash’ call after this
@@ -372,6 +371,11 @@ optional argument MARKERP, return the position as a new marker."
                (t (cons file pos)))))
         ;; Remove opened buffer in the process.
         (unless (or visiting markerp) (kill-buffer buffer)))))))
+
+(unless (featurep 'org-generic-id)
+  (unless org-generic-id-locations
+    (message "Loading org-generic-id-locations on first load.")
+    (org-generic-id-locations-load)))
 
 (provide 'org-generic-id)
 
