@@ -192,6 +192,9 @@ entries."
   :group 'org-gcal
   :type 'string)
 
+(defvar org-gcal--sync-lock nil
+  "Set if a sync function is running.")
+
 (defvar org-gcal-token-plist nil
   "Token plist.")
 
@@ -251,6 +254,9 @@ pair will be removed instead of set."
 Export the ones to the calendar if unless
 SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
   (interactive)
+  (when org-gcal--sync-lock
+    (user-error "org-gcal sync locked. If a previous sync has failed, call ‘org-gcal--sync-unlock’ to reset the lock and try again."))
+  (org-gcal--sync-lock)
   (org-generic-id-update-id-locations org-gcal-entry-id-property)
   (org-gcal--ensure-token)
   (when org-gcal-auto-archive
@@ -260,7 +266,7 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
         (org-gcal--archive-old-event))))
   (let ((up-time (org-gcal--up-time))
         (down-time (org-gcal--down-time)))
-    (deferred:$
+    (deferred:try
       (deferred:loop org-gcal-fetch-file-alist
         (lambda (calendar-id-file)
           (deferred:$
@@ -273,9 +279,10 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                                     (concat "Events fetched into\n"
                                             (cdr calendar-id-file))))
                 (deferred:succeed nil))))))
-      (deferred:nextc it
-        (lambda (_)
-          (org-generic-id-update-id-locations org-gcal-entry-id-property))))))
+      :finally
+      (lambda ()
+        (org-generic-id-update-id-locations org-gcal-entry-id-property)
+        (org-gcal--sync-unlock)))))
 
 
 (defun org-gcal--sync-calendar (calendar-id-file skip-export silent
@@ -637,6 +644,15 @@ have been moved from the default fetch file.  CALENDAR-ID is defined in
               (message "org-gcal-sync: error: %s" err))))))
     (deferred:succeed nil)))
 
+(defun org-gcal--sync-lock ()
+  "Activate sync lock."
+  (setq org-gcal--sync-lock t))
+
+(defun org-gcal--sync-unlock ()
+  "Deactivate sync lock in case of failed sync."
+  (interactive)
+  (setq org-gcal--sync-lock nil))
+
 ;;;###autoload
 (defun org-gcal-fetch ()
   "Fetch event data from google calendar."
@@ -645,14 +661,15 @@ have been moved from the default fetch file.  CALENDAR-ID is defined in
 
 ;;;###autoload
 (defun org-gcal-sync-buffer (&optional skip-export silent)
-  "\
-Sync entries containing Calendar events in the currently-visible portion of the
-buffer.
+  "Sync entries with Calendar events in currently-visible portion of buffer.
 
 Updates events on the server unless SKIP-EXPORT is set. In this case, events
 modified on the server will overwrite entries in the buffer.
 Set SILENT to non-nil to inhibit notifications."
   (interactive)
+  (when org-gcal--sync-lock
+    (user-error "org-gcal sync locked. If a previous sync has failed, call ‘org-gcal--sync-unlock’ to reset the lock and try again."))
+  (org-gcal--sync-lock)
   (org-gcal--ensure-token)
   (let*
       ((name (or (buffer-file-name) (buffer-name)))
@@ -688,22 +705,27 @@ Set SILENT to non-nil to inhibit notifications."
              do (forward-line 1)))
            (t
             (user-error "Unsupported major mode %s in current buffer" major-mode))))))
-    (deferred:$
-      (deferred:loop markers
-        (lambda (marker)
-          (org-with-point-at marker
-            (set-marker marker nil)
-            (deferred:$
-              (org-gcal-post-at-point nil skip-export)
-              (deferred:error it
-                (lambda (err)
-                  (message "org-gcal-sync-buffer: error: %s" err)))))))
-      (deferred:nextc it
-        (lambda (_)
-          (unless silent
-            (org-gcal--notify "Completed syncing events in buffer."
-                              (concat "Events synced in\n" name)))
-          (deferred:succeed nil))))))
+    (deferred:try
+      (deferred:$
+        (deferred:loop markers
+          (lambda (marker)
+            (org-with-point-at marker
+              (set-marker marker nil)
+              (deferred:$
+                (org-gcal-post-at-point nil skip-export)
+                (deferred:error it
+                  (lambda (err)
+                    (message "org-gcal-sync-buffer: error: %s" err)))))))
+        (deferred:nextc it
+          (lambda (_)
+            (unless silent
+              (org-gcal--notify "Completed syncing events in buffer."
+                                (concat "Events synced in\n" name)))
+            (deferred:succeed nil))))
+      :finally
+      (lambda ()
+        (org-generic-id-update-id-locations org-gcal-entry-id-property)
+        (org-gcal--sync-unlock)))))
 
 ;;;###autoload
 (defun org-gcal-fetch-buffer (&optional _skip-export _silent)
