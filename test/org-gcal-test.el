@@ -498,6 +498,132 @@ Second paragraph
 (ert-deftest org-gcal-test--post-at-point-basic ()
   "Verify basic case of ‘org-gcal-post-to-point’."
   (org-gcal-test--with-temp-buffer
+   "\
+* My event summary
+:PROPERTIES:
+:ETag:     \"12344321\"
+:LOCATION: Foobar's desk
+:calendar-id: foo@foobar.com
+:entry-id:       foobar1234/foo@foobar.com
+:END:
+:org-gcal:
+<2019-10-06 Sun 17:00-21:00>
+
+My event description
+
+Second paragraph
+:END:
+"
+   (with-mock
+    (stub org-gcal--time-zone => '(0 "UTC"))
+    (stub org-generic-id-add-location => nil)
+    (stub org-gcal-request-token => (deferred:succeed nil))
+    (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
+                                "My event summary" "Foobar's desk"
+                                "My event description\n\nSecond paragraph"
+                                "foo@foobar.com"
+                                * "\"12344321\"" "foobar1234"
+                                * * *))
+    (let ((org-gcal-managed-post-at-point-update-existing 'always-push))
+      (org-gcal-post-at-point)))))
+
+(ert-deftest org-gcal-test--post-at-point-api-response ()
+  "Verify that ‘org-gcal-post-to-point’ updates an event using the data
+returned from the Google Calendar API."
+  (org-gcal-test--with-temp-buffer
+      "\
+* Original summary
+:PROPERTIES:
+:ETag:     \"12344321\"
+:LOCATION: Original location
+:calendar-id: foo@foobar.com
+:entry-id:       foobar1234/foo@foobar.com
+:END:
+:org-gcal:
+<2021-03-05 Fri 12:00-14:00>
+
+Original description
+
+Original second paragraph
+:END:
+"
+    (with-mock
+      (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-generic-id-add-location => nil)
+      (stub org-gcal-request-token => (deferred:succeed nil))
+      (stub request-deferred =>
+            (deferred:succeed
+              (make-request-response
+               :status-code 200
+               :data org-gcal-test-event)))
+      (let ((org-gcal-managed-post-at-point-update-existing 'always-push))
+        (org-gcal-post-at-point)
+        (org-back-to-heading)
+        (let ((elem (org-element-at-point)))
+          (should (equal (org-element-property :title elem)
+                         "My event summary"))
+          (should (equal (org-element-property :ETAG elem)
+                         "\"12344321\""))
+          (should (equal (org-element-property :LOCATION elem)
+                         "Foobar's desk"))
+          (should (equal (org-element-property :CALENDAR-ID elem)
+                         "foo@foobar.com"))
+          (should (equal (org-element-property :ENTRY-ID elem)
+                         "foobar1234/foo@foobar.com")))
+        ;; Check contents of "org-gcal" drawer
+        (re-search-forward ":org-gcal:")
+        (let ((elem (org-element-at-point)))
+          (should (equal (org-element-property :drawer-name elem)
+                         "org-gcal"))
+          (should (equal (buffer-substring-no-properties
+                          (org-element-property :contents-begin elem)
+                          (org-element-property :contents-end elem))
+                         "\
+<2019-10-06 Sun 17:00-21:00>
+
+My event description
+
+Second paragraph
+")))))))
+
+(ert-deftest org-gcal-test--post-at-point-managed-update-existing-gcal ()
+  "Verify ‘org-gcal-post-at-point’ with ‘org-gcal-managed-update-existing-mode’
+set to \"gcal\"."
+  (org-gcal-test--with-temp-buffer
+      "\
+* My event summary
+:PROPERTIES:
+:ETag:     \"12344321\"
+:LOCATION: Foobar's desk
+:calendar-id: foo@foobar.com
+:entry-id:       foobar1234/foo@foobar.com
+:END:
+:org-gcal:
+<2019-10-06 Sun 17:00-21:00>
+
+My event description
+
+Second paragraph
+:END:
+"
+    (with-mock
+      (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-generic-id-add-location => nil)
+      (stub org-gcal-request-token => (deferred:succeed nil))
+      (mock (y-or-n-p *) => nil)
+      (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
+                                  "My event summary" "Foobar's desk"
+                                  "My event description\n\nSecond paragraph"
+                                  "foo@foobar.com"
+                                  * "\"12344321\"" "foobar1234"
+                                  * * t))
+      (let ((org-gcal-managed-update-existing-mode "gcal"))
+        (org-gcal-post-at-point)))))
+
+(ert-deftest org-gcal-test--post-at-point-managed-update-existing-org ()
+  "Verify ‘org-gcal-post-at-point’ with ‘org-gcal-managed-update-existing-mode’
+set to \"org\"."
+  (org-gcal-test--with-temp-buffer
       "\
 * My event summary
 :PROPERTIES:
@@ -523,12 +649,13 @@ Second paragraph
                                   "My event description\n\nSecond paragraph"
                                   "foo@foobar.com"
                                   * "\"12344321\"" "foobar1234"
-                                  * * *))
-      (org-gcal-post-at-point))))
+                                  * * nil))
+      (let ((org-gcal-managed-update-existing-mode "org"))
+        (org-gcal-post-at-point)))))
 
-(ert-deftest org-gcal-test--post-at-point-old-id-property ()
-  "Verify that \":ID:\" property is read for event ID by \
-‘org-gcal-post-to-point’ only if ‘org-gcal-entry-id-property’ is not present."
+(ert-deftest org-gcal-test--post-at-point-managed-create-from-entry-gcal ()
+  "Verify ‘org-gcal-post-at-point’ with ‘org-gcal-managed-create-from-entry-mode’
+set to \"gcal\"."
   (org-gcal-test--with-temp-buffer
       "\
 * My event summary
@@ -536,7 +663,40 @@ Second paragraph
 :ETag:     \"12344321\"
 :LOCATION: Foobar's desk
 :calendar-id: foo@foobar.com
-:ID:       foobar1234/foo@foobar.com
+:END:
+:org-gcal:
+<2019-10-06 Sun 17:00-21:00>
+
+My event description
+
+Second paragraph
+:END:
+"
+    (with-mock
+      (stub org-gcal--time-zone => '(0 "UTC"))
+      (stub org-generic-id-add-location => nil)
+      (stub org-gcal-request-token => (deferred:succeed nil))
+      (mock (y-or-n-p *) => nil)
+      (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
+                                  "My event summary" "Foobar's desk"
+                                  "My event description\n\nSecond paragraph"
+                                  "foo@foobar.com"
+                                  * "\"12344321\"" nil
+                                  * * t))
+      (let ((org-gcal-managed-update-existing-mode "gcal")
+            (org-gcal-managed-create-from-entry-mode "gcal"))
+        (org-gcal-post-at-point)))))
+
+(ert-deftest org-gcal-test--post-at-point-managed-create-from-entry-org ()
+  "Verify ‘org-gcal-post-at-point’ with ‘org-gcal-managed-create-from-entry-mode’
+set to \"org\"."
+  (org-gcal-test--with-temp-buffer
+      "\
+* My event summary
+:PROPERTIES:
+:ETag:     \"12344321\"
+:LOCATION: Foobar's desk
+:calendar-id: foo@foobar.com
 :END:
 :org-gcal:
 <2019-10-06 Sun 17:00-21:00>
@@ -554,11 +714,46 @@ Second paragraph
                                   "My event summary" "Foobar's desk"
                                   "My event description\n\nSecond paragraph"
                                   "foo@foobar.com"
-                                  * "\"12344321\"" "foobar1234"
-                                  * * *))
-      (org-gcal-post-at-point)))
+                                  * "\"12344321\"" nil
+                                  * * nil))
+      (let ((org-gcal-managed-update-existing-mode "gcal")
+            (org-gcal-managed-create-from-entry-mode "org"))
+        (org-gcal-post-at-point)))))
+
+(ert-deftest org-gcal-test--post-at-point-old-id-property ()
+  "Verify that \":ID:\" property is read for event ID by \
+‘org-gcal-post-to-point’ only if ‘org-gcal-entry-id-property’ is not present."
   (org-gcal-test--with-temp-buffer
-      "\
+   "\
+* My event summary
+:PROPERTIES:
+:ETag:     \"12344321\"
+:LOCATION: Foobar's desk
+:calendar-id: foo@foobar.com
+:ID:       foobar1234/foo@foobar.com
+:END:
+:org-gcal:
+<2019-10-06 Sun 17:00-21:00>
+
+My event description
+
+Second paragraph
+:END:
+"
+   (with-mock
+    (stub org-gcal--time-zone => '(0 "UTC"))
+    (stub org-generic-id-add-location => nil)
+    (stub org-gcal-request-token => (deferred:succeed nil))
+    (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
+                                "My event summary" "Foobar's desk"
+                                "My event description\n\nSecond paragraph"
+                                "foo@foobar.com"
+                                * "\"12344321\"" "foobar1234"
+                                * * *))
+    (let ((org-gcal-managed-post-at-point-update-existing 'always-push))
+      (org-gcal-post-at-point))))
+  (org-gcal-test--with-temp-buffer
+   "\
 * My event summary
 :PROPERTIES:
 :ETag:     \"12344321\"
@@ -575,24 +770,25 @@ My event description
 Second paragraph
 :END:
 "
-    (with-mock
-      (stub org-gcal--time-zone => '(0 "UTC"))
-      (stub org-generic-id-add-location => nil)
-      (stub org-gcal-request-token => (deferred:succeed nil))
-      (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
-                                  "My event summary" "Foobar's desk"
-                                  "My event description\n\nSecond paragraph"
-                                  "foo@foobar.com"
-                                  * "\"12344321\"" "foobar1234"
-                                  * * *))
-      (org-gcal-post-at-point))))
+   (with-mock
+    (stub org-gcal--time-zone => '(0 "UTC"))
+    (stub org-generic-id-add-location => nil)
+    (stub org-gcal-request-token => (deferred:succeed nil))
+    (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
+                                "My event summary" "Foobar's desk"
+                                "My event description\n\nSecond paragraph"
+                                "foo@foobar.com"
+                                * "\"12344321\"" "foobar1234"
+                                * * *))
+    (let ((org-gcal-managed-post-at-point-update-existing 'always-push))
+      (org-gcal-post-at-point)))))
 
 
 (ert-deftest org-gcal-test--post-at-point-no-id ()
   "Verify that ‘org-gcal-post-to-point’ doesn't send an ID to Calendar API if
 an org-gcal Calendar Event ID can't be retrieved from the current entry."
   (org-gcal-test--with-temp-buffer
-      "\
+   "\
 * My event summary
 :PROPERTIES:
 :LOCATION: Foobar's desk
@@ -724,7 +920,7 @@ Second paragraph
   "Verify that entry with a time/date range for its timestamp is parsed by
 ‘org-gcal-post-to-point’ (see https://orgmode.org/manual/Timestamps.html)."
   (org-gcal-test--with-temp-buffer
-      "\
+   "\
 * My event summary
 SCHEDULED: <2019-10-06 Sun 17:00>--<2019-10-07 Mon 21:00>
 :PROPERTIES:
@@ -739,17 +935,18 @@ My event description
 Second paragraph
 :END:
 "
-    (with-mock
-      (stub org-gcal--time-zone => '(0 "UTC"))
-      (stub org-generic-id-add-location => nil)
-      (stub org-gcal-request-token => (deferred:succeed nil))
-      (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-07T21:00:00Z"
-                                  "My event summary" "Foobar's desk"
-                                  "My event description\n\nSecond paragraph"
-                                  "foo@foobar.com"
-                                  * "\"12344321\"" "foobar1234"
-                                  * * *))
-      (org-gcal-post-at-point))))
+   (with-mock
+    (stub org-gcal--time-zone => '(0 "UTC"))
+    (stub org-generic-id-add-location => nil)
+    (stub org-gcal-request-token => (deferred:succeed nil))
+    (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-07T21:00:00Z"
+                                "My event summary" "Foobar's desk"
+                                "My event description\n\nSecond paragraph"
+                                "foo@foobar.com"
+                                * "\"12344321\"" "foobar1234"
+                                * * *))
+    (let ((org-gcal-managed-post-at-point-update-existing 'always-push))
+      (org-gcal-post-at-point)))))
 
 (ert-deftest org-gcal-test--delete-at-point-delete-drawer ()
   "Verify that the org-gcal drawer is deleted by ‘org-gcal-delete-at-point’ if
