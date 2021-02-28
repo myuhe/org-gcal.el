@@ -17,8 +17,6 @@
 ;;; Code:
 
 (require 'org)
-(require 'org-refile)
-(require 'ol)
 
 (declare-function message-make-fqdn "message" ())
 (declare-function org-goto-location "org-goto" (&optional _buf help))
