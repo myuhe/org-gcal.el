@@ -274,10 +274,10 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
                                      up-time down-time)
             (deferred:nextc it
               (lambda (_)
-                (unless silent
-                  (org-gcal--notify "Completed event fetching ."
-                                    (concat "Events fetched into\n"
-                                            (cdr calendar-id-file))))
+                (org-gcal--notify "Completed event fetching ."
+                                  (concat "Events fetched into\n"
+                                          (cdr calendar-id-file))
+                                  silent)
                 (deferred:succeed nil))))))
       :finally
       (lambda ()
@@ -718,9 +718,9 @@ Set SILENT to non-nil to inhibit notifications."
                     (message "org-gcal-sync-buffer: error: %s" err)))))))
         (deferred:nextc it
           (lambda (_)
-            (unless silent
-              (org-gcal--notify "Completed syncing events in buffer."
-                                (concat "Events synced in\n" name)))
+            (org-gcal--notify "Completed syncing events in buffer."
+                              (concat "Events synced in\n" name)
+                              silent)
             (deferred:succeed nil))))
       :finally
       (lambda ()
@@ -1809,9 +1809,12 @@ beginning position."
            nil t)
       (cons 'timestamp (match-beginning 0)))))
 
-(defun org-gcal--notify (title message)
-  "Send alert with TITLE and MESSAGE."
-  (when org-gcal-notify-p
+(defun org-gcal--notify (title message &optional silent)
+  "Send alert with TITLE and MESSAGE.
+
+When SILENT is non-nil, silence messages even when ‘org-gcal-notify-p’ is
+non-nil."
+  (when (and org-gcal-notify-p (not silent))
     (if org-gcal-logo-file
         (alert message :title title :icon org-gcal-logo-file)
       (alert message :title title))
