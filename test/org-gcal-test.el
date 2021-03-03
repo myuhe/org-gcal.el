@@ -773,30 +773,31 @@ Second paragraph
 :END:
 "))
     (org-gcal-test--with-temp-buffer
-        buf
-      ;; Don’t delete drawer if we don’t receive 200.
-      (with-mock
-        (let ((deferred:debug t))
-          (stub org-gcal--time-zone => '(0 "UTC")))
-        (stub org-generic-id-add-location => nil)
-        (stub org-gcal-request-token => (deferred:succeed nil))
-        (stub y-or-n-p => t)
-        (stub alert => t)
-        (stub request-deferred =>
-              (deferred:succeed
-                (make-request-response
-                 :status-code 500
-                 :error-thrown '(error . nil))))
-        (org-back-to-heading)
-        (deferred:sync!
-          (deferred:$
-            (org-gcal-delete-at-point)
-            (deferred:error it #'ignore)))
-        (org-back-to-heading)
-        (should (re-search-forward ":org-gcal:" nil 'noerror))))
+     buf
+     ;; Don’t delete drawer if we don’t receive 200.
+     (with-mock
+      (let ((deferred:debug t))
+        (stub org-gcal--time-zone => '(0 "UTC")))
+      (stub org-generic-id-add-location => nil)
+      (stub org-gcal-request-token => (deferred:succeed nil))
+      (stub y-or-n-p => t)
+      (stub alert => t)
+      (stub request-deferred =>
+            (deferred:succeed
+              (make-request-response
+               :status-code 500
+               :error-thrown '(error . nil))))
+      (deferred:sync!
+        (deferred:$
+          (org-gcal-delete-at-point)
+          (deferred:error it #'ignore)))
+      (org-back-to-heading)
+      (should (re-search-forward ":org-gcal:" nil 'noerror))))
 
     ;; Delete drawer if we do receive 200.
-    (with-mock
+    (org-gcal-test--with-temp-buffer
+     buf
+     (with-mock
       (let ((deferred:debug t))
         (stub org-gcal--time-zone => '(0 "UTC"))
         (stub org-generic-id-add-location => nil)
@@ -806,13 +807,14 @@ Second paragraph
               (deferred:succeed
                 (make-request-response
                  :status-code 200)))
-        (org-back-to-heading)
         (deferred:sync! (org-gcal-delete-at-point))
         (org-back-to-heading)
-        (should-not (re-search-forward ":org-gcal:" nil 'noerror))))
+        (should-not (re-search-forward ":org-gcal:" nil 'noerror)))))
 
     ;; Delete the entire entry if configured to
-    (with-mock
+    (org-gcal-test--with-temp-buffer
+     buf
+     (with-mock
       (let ((deferred:debug t)
             (org-gcal-remove-api-cancelled-events t))
         (stub org-gcal--time-zone => '(0 "UTC"))
@@ -822,9 +824,8 @@ Second paragraph
               (deferred:succeed
                 (make-request-response
                  :status-code 200)))
-        (org-back-to-heading)
         (deferred:sync! (org-gcal-delete-at-point))
-        (should (equal (buffer-string) ""))))))
+        (should (equal (buffer-string) "")))))))
 
 (ert-deftest org-gcal-test--ert-fail ()
   "Test handling of ERT failures in deferred code. Should fail."
