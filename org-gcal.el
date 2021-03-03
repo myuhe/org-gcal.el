@@ -1760,7 +1760,9 @@ Returns a ‘deferred’ object that can be used to wait for completion."
       (lambda (_)
         (set-marker marker nil)))))
 
-(defun org-gcal--capture-post ()
+(declare-function org-capture-goto-last-stored "org-capture" ())
+(with-eval-after-load 'org-capture
+  (defun org-gcal--capture-post ()
     (when (not org-note-abort)
       (save-excursion
         (save-window-excursion
@@ -1770,8 +1772,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
             (when (string= (file-name-nondirectory (cdr i))
                            (buffer-name))
               (org-gcal-post-at-point)))))))
-
-(add-hook 'org-capture-after-finalize-hook 'org-gcal--capture-post)
+  (add-hook 'org-capture-after-finalize-hook 'org-gcal--capture-post))
 
 (defun org-gcal--ensure-token ()
   "Ensure that access, refresh, and sync token variables in expected state."
