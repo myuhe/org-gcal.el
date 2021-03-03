@@ -1,4 +1,4 @@
-* Org-Gcal [[http://melpa.org/#/org-gcal][file:http://melpa.org/packages/org-gcal-badge.svg]]
+* Org-Gcal [[http://melpa.org/#/org-gcal][file:https://melpa.org/packages/org-gcal-badge.svg]] file:https://github.com/kidd/org-gcal.el/actions/workflows/main.yml/badge.svg
  =org-gcal= offers
   - Fetch google calendar event
   - Post/edit org element
