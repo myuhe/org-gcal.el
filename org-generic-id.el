@@ -153,9 +153,9 @@ When FILES is given, scan also these files."
                      files)))))
          (nfiles (length files))
          (id-regexp
-          (rx (seq bol (0+ (any "\t "))
-                   (literal (format ":%s:" id-prop))
-                   (1+ " ") (not (any " ")))))
+          (rx-to-string `(seq bol (0+ (any "\t "))
+                              ,(format ":%s:" id-prop)
+                              (1+ " ") (not (any " ")))))
          (seen-ids nil)
          (ndup 0)
          (i 0))
