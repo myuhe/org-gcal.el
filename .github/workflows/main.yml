@@ -1,0 +1,41 @@
+name: Test
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        emacs_version: ['26.1', '27.1', 'snapshot']
+        cask_version: ['snapshot']
+
+    steps:
+    - name: Checkout org-gcal repo
+      uses: actions/checkout@v2
+
+    - name: Install Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.6'
+        architecture: 'x64'
+
+    - name: Install Emacs
+      uses: purcell/setup-emacs@master
+      with:
+        version: ${{matrix.emacs_version}}
+
+    - name: Install Cask
+      uses: conao3/setup-cask@master
+      with:
+        version: 'snapshot'
+
+    - name: Install dependencies
+      run: make elpa
+
+    - name: Compile
+      run: make compile
+
+    - name: Test
+      run: make test
