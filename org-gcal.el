@@ -129,6 +129,13 @@ Predicate functions take an event, and if they return nil the
   :group 'org-gcal
   :type 'string)
 
+(defcustom org-gcal-local-timezone nil
+  "Org-gcal local timezone. timezone value should use 'TZ
+database name', which can be found in
+'https://en.wikipedia.org/wiki/List_of_tz_database_time_zones'."
+  :group 'org-gcal
+  :type 'string)
+
 (defvaralias 'org-gcal-remove-cancelled-events 'org-gcal-remove-api-cancelled-events)
 (defcustom org-gcal-remove-api-cancelled-events 'ask
   "Whether to remove Org-mode headlines for events cancelled in Google Calendar.
@@ -422,6 +429,7 @@ CALENDAR-ID-FILE is a cons in ‘org-gcal-fetch-file-alist’, for which see."
    (append
     `(("access_token" . ,(org-gcal--get-access-token))
       ("singleEvents" . "True"))
+    (when org-gcal-local-timezone `(("timeZone" . ,org-gcal-local-timezone)))
     (seq-let [expires sync-token]
         ;; Ensure ‘org-gcal--sync-tokens-get’ return value is actually a list
         ;; before passing to ‘seq-let’.
@@ -1332,6 +1340,12 @@ This will also update the stored ID locations using
   "Has EVENT been cancelled?"
   (string= (plist-get event :status) "cancelled"))
 
+(defun org-gcal--convert-time-to-local-timezone (date-time local-timezone)
+  (if (and date-time
+           local-timezone)
+      (format-time-string "%Y-%m-%dT%H:%M:%S%z" (parse-iso8601-time-string date-time) local-timezone)
+    date-time))
+
 (defun org-gcal--update-entry (calendar-id event)
   "\
   Update the entry at the current heading with information from EVENT, which is
@@ -1356,8 +1370,8 @@ This will also update the stored ID locations using
                            :date))
          (eday  (plist-get (plist-get event :end)
                            :date))
-         (start (if stime stime sday))
-         (end   (if etime etime eday))
+         (start (org-gcal--convert-time-to-local-timezone (if stime stime sday) org-gcal-local-timezone))
+         (end   (org-gcal--convert-time-to-local-timezone (if etime etime eday) org-gcal-local-timezone))
          (old-time-desc (org-gcal--get-time-and-desc))
          (old-start (plist-get old-time-desc :start))
          (old-end (plist-get old-time-desc :start))

@@ -109,6 +109,14 @@ screen that says "This app isn't verify". You will need to click on the
 
    To get more detailed information you can [[https://digibites.zendesk.com/hc/en-us/articles/200299863-How-do-I-share-my-calendar-with-someone-else-Google-Calendar-or-Outlook-com-][check this link]].
 
+** Different timezone
+
+   If you local timezone is different from the Calendar. You can use
+   your local timezone to fetch events. Event will be fetched using
+   timezone defined in =org-gcal-local-timezone=. Timezone string can
+   be found from:
+   https://en.wikipedia.org/wiki/List_of_tz_database_time_zones.
+
 * Testing
 
 To execute compile and regression tests, run ~make~.
