@@ -1775,18 +1775,40 @@ Returns a ‘deferred’ object that can be used to wait for completion."
         (set-marker marker nil)))))
 
 (declare-function org-capture-goto-last-stored "org-capture" ())
+(defun org-gcal--capture-post ()
+  "Create gcal event for headline when captured or refiled into a gcal Org file."
+  (when (not org-note-abort)
+    (save-excursion
+      (save-window-excursion
+        (let ((inhibit-message t))
+          (org-capture-goto-last-stored))
+        (dolist (i org-gcal-fetch-file-alist)
+          (when (and (buffer-file-name)
+                     (string= (file-truename (cdr i))
+                              (file-truename (buffer-file-name))))
+            (org-entry-put (point) org-gcal-calendar-id-property (car i))
+            (org-gcal-post-at-point)))))))
+(defun org-gcal--refile-post ()
+  "Create gcal event for headline when refiled into a gcal Org file."
+  (unless (or
+           ;; Refile from capture is handled by ‘org-gcal--capture-post'.
+           (bound-and-true-p org-capture-is-refiling)
+           ;; Don’t POST unnecessarily if the headline being refiled is already
+           ;; a gcal event.
+           (and (org-entry-get (point) org-gcal-calendar-id-property)
+                (org-entry-get (point) org-gcal-entry-id-property)))
+    (save-excursion
+      (save-window-excursion
+        (dolist (i org-gcal-fetch-file-alist)
+          (when (and (buffer-file-name)
+                     (string= (file-truename (cdr i))
+                              (file-truename (buffer-file-name))))
+            (org-entry-put (point) org-gcal-calendar-id-property (car i))
+            (org-gcal-post-at-point)))))))
 (with-eval-after-load 'org-capture
-  (defun org-gcal--capture-post ()
-    (when (not org-note-abort)
-      (save-excursion
-        (save-window-excursion
-          (let ((inhibit-message t))
-            (org-capture-goto-last-stored))
-          (dolist (i org-gcal-fetch-file-alist)
-            (when (string= (file-name-nondirectory (cdr i))
-                           (buffer-name))
-              (org-gcal-post-at-point)))))))
   (add-hook 'org-capture-after-finalize-hook 'org-gcal--capture-post))
+(with-eval-after-load 'org-refile
+  (add-hook 'org-after-refile-insert-hook 'org-gcal--refile-post))
 
 (defun org-gcal--ensure-token ()
   "Ensure that access, refresh, and sync token variables in expected state."
