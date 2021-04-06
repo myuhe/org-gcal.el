@@ -959,7 +959,8 @@ This will also update the stored ID locations using
            (skip-export skip-export)
            (marker (point-marker))
            (elem (org-element-headline-parser (point-max) t))
-           (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
+           (smry (substring-no-properties
+                  (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment)))
            (loc (org-entry-get (point) "LOCATION"))
            (recurrence (org-entry-get (point) "recurrence"))
            (event-id (org-gcal--get-id (point)))
@@ -1583,7 +1584,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
         (request-deferred
          (concat
           (org-gcal-events-url calendar-id)
-          (when (and event-id etag)
+          (when event-id
             (concat "/" event-id)))
          :type (if event-id "PATCH" "POST")
          :headers (append
