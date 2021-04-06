@@ -1716,9 +1716,9 @@ For valid values of EXISTING-MODE see
   (or (cl-loop for (id . file) in org-gcal-fetch-file-alist
                if (file-equal-p file (buffer-file-name (buffer-base-buffer)))
                return id)
-      (user-error (concat "Buffer `%s' may not related to google calendar; ")))
-  "please check/configure `org-gcal-fetch-file-alist'"
-                  (buffer-name))
+      (user-error (concat "Buffer `%s' may not be related to google calendar; "
+                          "please check/configure `org-gcal-fetch-file-alist'")
+                  (buffer-name))))
 
 (defun org-gcal--get-event (calendar-id event-id)
   "\
