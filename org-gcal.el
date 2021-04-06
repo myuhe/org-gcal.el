@@ -1583,7 +1583,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
         (request-deferred
          (concat
           (org-gcal-events-url calendar-id)
-          (when (and event-id etag)
+          (when event-id
             (concat "/" event-id)))
          :type (if event-id "PATCH" "POST")
          :headers (append
