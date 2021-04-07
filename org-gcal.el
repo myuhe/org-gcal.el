@@ -51,7 +51,6 @@
 ;;; Code:
 
 (defgroup org-gcal nil "Org sync with Google Calendar"
-  :tag "Org google calendar"
   :group 'org)
 
 (defcustom org-gcal-up-days 30
