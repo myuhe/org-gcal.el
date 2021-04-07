@@ -234,6 +234,25 @@ Values: see ‘org-gcal-managed-newly-fetched-mode’."
           (const :tag "Insert at top level" 'top-level)
           (const :tag "Insert under headline for parent event" 'nested)))
 
+(defcustom org-gcal-after-update-entry-functions nil
+  "List of functions to run just before ‘org-gcal--update-entry’ returns.
+
+This is the function called when an event is created, updated, or deleted. Each
+function in the list is called with the following arguments:
+
+- CALENDAR-ID: the calendar ID of the event, as a string.
+- EVENT: the event data downloaded from the Google Calendar API and parsed using
+  ‘org-gcal--json-read'.
+- UPDATE-MODE: a symbol, one of
+  - NEWLY-FETCHED: the event is newly fetched (see
+    ‘org-gcal-managed-newly-fetched-mode').
+  - UPDATE-EXISTING: a headline with existing calendar and event IDs is being
+    updated (see ‘org-gcal-managed-update-existing-mode').
+  - CREATE-FROM-ENTRY: a headline without existing calendar and event IDs is
+    being updated (see ‘org-gcal-managed-create-from-entry-mode’)."
+  :group 'org-gcal
+  :type 'list)
+
 (defcustom org-gcal-entry-id-property "entry-id"
   "\
 Org-mode property on org-gcal entries that records the calendar and event ID."
@@ -686,7 +705,7 @@ Any parent recurring events are appended in-place to the list PARENT-EVENTS."
                (org-with-point-at parent-marker
                  (org-insert-heading-respect-content 'invisible-ok)
                  (org-demote)
-                 (org-gcal--update-entry calendar-id event))))
+                 (org-gcal--update-entry calendar-id event 'newly-fetched))))
            nil))
         ;; Don't insert instances of cancelled events that haven't already been
         ;; fetched.
@@ -698,7 +717,7 @@ Any parent recurring events are appended in-place to the list PARENT-EVENTS."
          (atomic-change-group
            (org-with-point-at (point-max)
              (insert "\n* ")
-             (org-gcal--update-entry calendar-id event)
+             (org-gcal--update-entry calendar-id event 'newly-fetched)
              (org-entry-put (point) org-gcal-managed-property
                             org-gcal-managed-newly-fetched-mode)))
          nil)))
@@ -725,7 +744,7 @@ have been moved from the default fetch file.  CALENDAR-ID is defined in
               (set-marker marker nil)
               (if (and skip-export event)
                   (progn
-                    (org-gcal--update-entry calendar-id event)
+                    (org-gcal--update-entry calendar-id event 'update-existing)
                     (deferred:succeed nil))
                 (org-gcal-post-at-point nil skip-export
                                         (org-gcal--sync-get-update-existing)))))
@@ -1556,12 +1575,17 @@ For valid values of EXISTING-MODE see
       (format-time-string "%Y-%m-%dT%H:%M:%S%z" (parse-iso8601-time-string date-time) local-timezone)
     date-time))
 
-(defun org-gcal--update-entry (calendar-id event)
-  "\
-  Update the entry at the current heading with information from EVENT, which is
-  parsed from the Calendar API JSON response using
-  ‘org-gcal--json-read’. Point must be located on an Org-mode heading line or
-  an error will be thrown. Point is not preserved."
+(defun org-gcal--update-entry (calendar-id event &optional update-mode)
+  "Update the entry at the current heading with information from EVENT.
+
+EVENT is parsed from the Calendar API JSON response using ‘org-gcal--json-read’.
+CALENDAR-ID must be passed as well. Point must be located on an Org-mode heading
+line or an error will be thrown. Point is not preserved.
+
+If UPDATE-MODE is passed, then the functions in
+‘org-gcal-after-update-entry-functions' are called in order with the same
+arguments as passed to this function and the point moved to the beginning of the
+heading."
   (unless (org-at-heading-p)
     (user-error "Must be on Org-mode heading."))
   (let* ((smry  (or (plist-get event :summary)
@@ -1659,7 +1683,13 @@ For valid values of EXISTING-MODE see
     (when (org-gcal--event-cancelled-p event)
       (save-excursion
         (org-back-to-heading t)
-        (org-gcal--handle-cancelled-entry)))))
+        (org-gcal--handle-cancelled-entry)))
+    (when update-mode
+      (cl-dolist (f org-gcal-after-update-entry-functions)
+        (save-excursion
+          (org-back-to-heading t)
+          (funcall f calendar-id event update-mode))))))
+
 
 (defun org-gcal--handle-cancelled-entry ()
   "Perform actions to be done on cancelled entries."
@@ -1873,7 +1903,8 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                             (goto-char (marker-position marker))
                             (org-gcal--update-entry
                              calendar-id
-                             (request-response-data response))))
+                             (request-response-data response)
+                             (if event-id 'update-existing 'create-from-entry))))
                         (deferred:succeed nil))))))
                ;; Generic error-handler meant to provide useful information about
                ;; failure cases not otherwise explicitly specified.
@@ -1891,7 +1922,10 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                         (goto-char (marker-position marker))
                         ;; Update the entry to add ETag, as well as other
                         ;; properties if this is a newly-created event.
-                        (org-gcal--update-entry calendar-id data)))
+                        (org-gcal--update-entry calendar-id data
+                                                (if event-id
+                                                    'update-existing
+                                                  'create-from-entry))))
                     (org-gcal--notify "Event Posted"
                                       (concat "Org-gcal post event\n  " (plist-get data :summary)))))
                 (deferred:succeed nil)))))))
@@ -1973,7 +2007,8 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                           (goto-char (marker-position marker))
                           (org-gcal--update-entry
                            calendar-id
-                           (request-response-data response))))
+                           (request-response-data response)
+                           'update-existing)))
                       (deferred:succeed nil)))))
                ;; Generic error-handler meant to provide useful information about
                ;; failure cases not otherwise explicitly specified.
