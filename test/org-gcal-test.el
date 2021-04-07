@@ -547,44 +547,52 @@ Original description
 Original second paragraph
 :END:
 "
-    (with-mock
-      (stub org-gcal--time-zone => '(0 "UTC"))
-      (stub org-generic-id-add-location => nil)
-      (stub org-gcal-request-token => (deferred:succeed nil))
-      (stub request-deferred =>
-            (deferred:succeed
-              (make-request-response
-               :status-code 200
-               :data org-gcal-test-event)))
-      (let ((org-gcal-managed-post-at-point-update-existing 'always-push))
-        (org-gcal-post-at-point)
-        (org-back-to-heading)
-        (let ((elem (org-element-at-point)))
-          (should (equal (org-element-property :title elem)
-                         "My event summary"))
-          (should (equal (org-element-property :ETAG elem)
-                         "\"12344321\""))
-          (should (equal (org-element-property :LOCATION elem)
-                         "Foobar's desk"))
-          (should (equal (org-element-property :CALENDAR-ID elem)
-                         "foo@foobar.com"))
-          (should (equal (org-element-property :ENTRY-ID elem)
-                         "foobar1234/foo@foobar.com")))
-        ;; Check contents of "org-gcal" drawer
-        (re-search-forward ":org-gcal:")
-        (let ((elem (org-element-at-point)))
-          (should (equal (org-element-property :drawer-name elem)
-                         "org-gcal"))
-          (should (equal (buffer-substring-no-properties
-                          (org-element-property :contents-begin elem)
-                          (org-element-property :contents-end elem))
-                         "\
+    (defvar update-entry-hook-called nil)
+    (setq update-entry-hook-called nil)
+    (let (org-gcal-after-update-entry-functions)
+      (defun update-entry-hook (calendar-id event update-mode)
+        (message "update-entry-hook %S %S %S" calendar-id event update-mode)
+        (setq update-entry-hook-called t))
+      (add-hook 'org-gcal-after-update-entry-functions #'update-entry-hook)
+      (with-mock
+        (stub org-gcal--time-zone => '(0 "UTC"))
+        (stub org-generic-id-add-location => nil)
+        (stub org-gcal-request-token => (deferred:succeed nil))
+        (stub request-deferred =>
+              (deferred:succeed
+                (make-request-response
+                 :status-code 200
+                 :data org-gcal-test-event)))
+        (let ((org-gcal-managed-post-at-point-update-existing 'always-push))
+          (org-gcal-post-at-point)
+          (org-back-to-heading)
+          (should (equal update-entry-hook-called t))
+          (let ((elem (org-element-at-point)))
+            (should (equal (org-element-property :title elem)
+                           "My event summary"))
+            (should (equal (org-element-property :ETAG elem)
+                           "\"12344321\""))
+            (should (equal (org-element-property :LOCATION elem)
+                           "Foobar's desk"))
+            (should (equal (org-element-property :CALENDAR-ID elem)
+                           "foo@foobar.com"))
+            (should (equal (org-element-property :ENTRY-ID elem)
+                           "foobar1234/foo@foobar.com")))
+          ;; Check contents of "org-gcal" drawer
+          (re-search-forward ":org-gcal:")
+          (let ((elem (org-element-at-point)))
+            (should (equal (org-element-property :drawer-name elem)
+                           "org-gcal"))
+            (should (equal (buffer-substring-no-properties
+                            (org-element-property :contents-begin elem)
+                            (org-element-property :contents-end elem))
+                           "\
 <2019-10-06 Sun 17:00-21:00>
 
 My event description
 
 Second paragraph
-")))))))
+"))))))))
 
 (ert-deftest org-gcal-test--post-at-point-managed-update-existing-gcal ()
   "Verify ‘org-gcal-post-at-point’ with ‘org-gcal-managed-update-existing-mode’
