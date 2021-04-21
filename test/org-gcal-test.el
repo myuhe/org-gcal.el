@@ -70,6 +70,15 @@
   (replace-regexp-in-string "confirmed" "cancelled"
                             org-gcal-test-event-json))
 
+(defconst org-gcal-test-full-day-event-json
+  (replace-regexp-in-string
+   "\"dateTime\": \"2019-10-06T17:00:00-07:00\""
+   "\"date\": \"2019-10-06\""
+  (replace-regexp-in-string
+   "\"dateTime\": \"2019-10-06T21:00:00-07:00\""
+   "\"date\": \"2019-10-07\""
+                            org-gcal-test-event-json)))
+
 (defmacro org-gcal-test--with-temp-buffer (contents &rest body)
   "Create a ‘org-mode’ enabled temp buffer with CONTENTS.
 BODY is code to be executed within the temp buffer.  Point is
@@ -82,7 +91,7 @@ always located at the beginning of the buffer."
      ,@body))
 
 (defun org-gcal-test--json-read-string (json)
-  "Wrap ‘org-gcal--json-read’ to parse a JSON string"
+  "Wrap ‘org-gcal--json-read’ to parse a JSON string."
   (with-temp-buffer
     (insert json)
     (org-gcal--json-read)))
@@ -92,6 +101,9 @@ always located at the beginning of the buffer."
 
 (defconst org-gcal-test-cancelled-event
   (org-gcal-test--json-read-string org-gcal-test-cancelled-event-json))
+
+(defconst org-gcal-test-full-day-event
+  (org-gcal-test--json-read-string org-gcal-test-full-day-event-json))
 
 (ert-deftest org-gcal-test--save-sexp ()
   "Verify that org-gcal--save-sexp saves its data to the right place."
@@ -1031,6 +1043,51 @@ Second paragraph
                  :status-code 200)))
         (deferred:sync! (org-gcal-delete-at-point))
         (should (equal (buffer-string) "")))))))
+
+
+(ert-deftest org-gcal-test--save-with-full-day-event ()
+  "Verify that a full day event will get set correctly."
+   (org-gcal-test--with-temp-buffer
+   "* "
+   (org-gcal--update-entry org-gcal-test-calendar-id
+                           org-gcal-test-full-day-event)
+   (org-back-to-heading)
+   ;; Check contents of "org-gcal" drawer
+   (re-search-forward ":org-gcal:")
+   (let ((elem (org-element-at-point)))
+     (should (equal (buffer-substring-no-properties
+                     (org-element-property :contents-begin elem)
+                     (org-element-property :contents-end elem))
+                    "\
+<2019-10-06 Sun>
+
+My event description
+
+Second paragraph
+")))))
+
+(ert-deftest org-gcal-test--save-with-full-day-event-and-local-timezone ()
+  "Verify that a full day event will get set correctly when local-timezone is set."
+  (let (
+        (org-gcal-local-timezone "Europe/London"))
+   (org-gcal-test--with-temp-buffer
+   "* "
+   (org-gcal--update-entry org-gcal-test-calendar-id
+                           org-gcal-test-full-day-event)
+   (org-back-to-heading)
+   ;; Check contents of "org-gcal" drawer
+   (re-search-forward ":org-gcal:")
+   (let ((elem (org-element-at-point)))
+     (should (equal (buffer-substring-no-properties
+                     (org-element-property :contents-begin elem)
+                     (org-element-property :contents-end elem))
+                    "\
+<2019-10-06 Sun>
+
+My event description
+
+Second paragraph
+"))))))
 
 (ert-deftest org-gcal-test--ert-fail ()
   "Test handling of ERT failures in deferred code. Should fail."
