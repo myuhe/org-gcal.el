@@ -19,27 +19,35 @@
 
 3. Click on the project
 
-4. Click on *APIs & Auth* then *Credentials*
+4. Click on *Dashboard*
 
-5. Click on *Create New Client ID* with Application type /Installed application/, Installed application type /Other/
+5. Click on *Library*
 
-6. Click on *Create Client ID*
+6. Choose *Google Calender API* and click *ENABLE*
 
-7. Record the Client ID and Client secret for setup.
+7. Click on *OAuth Consent Screen*
 
-8. Under the same *APIs & Auth* menu section, select *APIs*
+8. Choose *Internal* and click *Create*
 
-9. Scroll down to *Calendar API*. Click the *Status* button to enable calendar API access to the app you created in steps 5 & 6.
+9. Choose any *App Name* and any Support and Developer E-Mail addresses -> *SAVE AND CONTINUE*
 
-   Go to [[https://www.google.com/calendar/render][Google setting page]] to check the calendar ID.
+10. Add appropriate scopes for the Google Calender API (eg., only allow read access if you only want to fetch) -> *SAVE AND CONTINUE*
 
-10. Go to [[https://www.google.com/calendar/render][Google setting page]] and click the gear-shaped settings icon in the upper right, then select "Settings" from the drop down list.
+11. Click on *Credentials*
 
-11. Select the "Calendars" tab, which will display a list of your calendars.
+12. Click on *Create Credentials* -> *Create OAuth client ID*
 
-12. Select the calendar you would like to synchronize with. This will take you to the "Calendar Details" page for that calendar. Near the end is a section titled "Calendar Address". Following the XML, ICAL, and HTML tags, you will see your Calendar ID.
+13. Choose *Desktop App*, choose any name and click *Create*
 
-13. Copy the Calendar ID for use in the settings below, where you will use it as the first element in the org-gcal-file-alist for associating calendars with specific org files. You can associate different calendars with different org files, so repeat this for each calendar you want to use.
+14. Record the Client ID and Client secret for setup.
+
+15. Go to [[https://www.google.com/calendar/render][Google setting page]] and click the gear-shaped settings icon in the upper right, then select "Settings" from the drop down list.
+
+16. Select the calendar you would like to synchronize with in the left sub navigation.
+
+17. Click on *Integrate Calendar*
+
+18. Copy the Calendar ID for use in the settings below, where you will use it as the first element in the org-gcal-file-alist for associating calendars with specific org files. You can associate different calendars with different org files, so repeat this for each calendar you want to use.
 
 ** Setting example
 
