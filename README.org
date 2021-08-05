@@ -338,8 +338,21 @@ Here the parent meeting has been running for several years, but only the
 instances of the meeting in the range given by =org-gcal-down-days= and
 =org-gcal-up-days= are fetched.
 
-* Errors
-** Duplicate ID
+* Troubleshooting
+** Debugging
+
+Because we used the [[https://github.com/kiwanami/emacs-deferred][deferred.el]] to perform asynchronous operations like calling
+~request~ (via [[https://github.com/tkf/emacs-request/blob/master/request-deferred.el][~request-deferred~]]), normal Emacs debugging and stack traces tend
+not to be as useful as usual. The best way to debug is to run ~M-x
+org-gcal-toggle-debug~, which sets a variety of debugging variables to ease
+debugging. The old values of the variables are saved so they can be restored by
+another call to ~M-x org-gcal-toggle-debug~.
+
+One of the most useful things this enables is logging of HTTP requests. Open the
+~*request-log*~ buffer to see all requests issued by this library.
+
+** Errors
+*** Duplicate ID
 
 You get an error like this:
 

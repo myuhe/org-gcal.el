@@ -939,6 +939,45 @@ Calendar. For SILENT and FILTER-DATE see ‘org-gcal-sync-buffer’."
   (interactive)
   (org-gcal-sync-buffer t silent filter-date))
 
+(defvar org-gcal-debug nil)
+;;;###autoload
+(defun org-gcal-toggle-debug ()
+  "Toggle debugging flags for ‘org-gcal'."
+  (interactive)
+  (cond
+   (org-gcal-debug
+    (setq
+     debug-on-error (cdr (assq 'debug-on-error org-gcal-debug))
+     debug-ignored-errors (cdr (assq 'debug-ignored-errors org-gcal-debug))
+     deferred:debug (cdr (assq 'deferred:debug org-gcal-debug))
+     deferred:debug-on-signal
+     (cdr (assq 'deferred:debug-on-signal org-gcal-debug))
+     request-log-level (cdr (assq 'request-log-level org-gcal-debug))
+     request-log-buffer-name (cdr (assq 'request-log-buffer-name org-gcal-debug))
+     org-gcal-debug nil)
+    (message "org-gcal-debug DISABLED"))
+   (t
+    (setq
+     org-gcal-debug
+     `((debug-on-error . ,debug-on-error)
+       (debug-ignored-errors . ,debug-ignored-errors)
+       (deferred:debug . ,deferred:debug)
+       (deferred:debug-on-signal . ,deferred:debug-on-signal)
+       (request-log-level . ,request-log-level)
+       (request-log-buffer-name . ,request-log-buffer-name))
+     debug-on-error '(error)
+     ;; These are errors that are thrown by various pieces of code that
+     ;; don’t mean anything.
+     debug-ignored-errors (append debug-ignored-errors
+                                  '(scan-error file-already-exists))
+     deferred:debug t
+     request-message-level 'debug
+     request-log-level 'debug
+     ;; Remove leading space so it shows up in the buffer list.
+     request-log-buffer-name "*request-log*"
+     deferred:debug-on-signal t)
+    (message "org-gcal-debug ENABLED"))))
+
 (defun org-gcal--filter (items)
   "Filter ITEMS on an AND of `org-gcal-fetch-event-filters' functions.
 Run each element from ITEMS through all of the filters.  If any
