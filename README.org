@@ -338,6 +338,30 @@ Here the parent meeting has been running for several years, but only the
 instances of the meeting in the range given by =org-gcal-down-days= and
 =org-gcal-up-days= are fetched.
 
+** Customizing the contents of event entries
+
+If you would like to customize the contents of event entries (for example, to add a property from the Google Calendar API that's not automatically written to the Org-mode entry), you can add a function to the list =org-gcal-after-update-entry-functions=. For example, here is some code to add the =Effort= property to an entry based on the duration of the event (note that the current point is placed at the beginning of the entry when the function is called):
+
+#+BEGIN_SRC emacs-lisp
+  (defun my-org-gcal-set-effort (_calendar-id event _update-mode)
+    "Set Effort property based on EVENT if not already set."
+    (when-let* ((stime (plist-get (plist-get event :start)
+                             :dateTime))
+                (etime (plist-get (plist-get event :end)
+                                  :dateTime))
+                (diff (float-time
+                       (time-subtract (org-gcal--parse-calendar-time-string etime)
+                                      (org-gcal--parse-calendar-time-string stime))))
+                (minutes (floor (/ diff 60))))
+      (let ((effort (org-entry-get (point) org-effort-property)))
+        (unless effort
+          (message "need to set effort - minutes %S" minutes)
+          (org-entry-put (point)
+                         org-effort-property
+                         (apply #'format "%d:%02d" (cl-floor minutes 60)))))))
+  (add-hook 'org-gcal-after-update-entry-functions #'my-org-gcal-set-effort)
+#+END_SRC
+
 * Troubleshooting
 ** Debugging
 
