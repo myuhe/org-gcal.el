@@ -338,8 +338,45 @@ Here the parent meeting has been running for several years, but only the
 instances of the meeting in the range given by =org-gcal-down-days= and
 =org-gcal-up-days= are fetched.
 
-* Errors
-** Duplicate ID
+** Customizing the contents of event entries
+
+If you would like to customize the contents of event entries (for example, to add a property from the Google Calendar API that's not automatically written to the Org-mode entry), you can add a function to the list =org-gcal-after-update-entry-functions=. For example, here is some code to add the =Effort= property to an entry based on the duration of the event (note that the current point is placed at the beginning of the entry when the function is called):
+
+#+BEGIN_SRC emacs-lisp
+  (defun my-org-gcal-set-effort (_calendar-id event _update-mode)
+    "Set Effort property based on EVENT if not already set."
+    (when-let* ((stime (plist-get (plist-get event :start)
+                             :dateTime))
+                (etime (plist-get (plist-get event :end)
+                                  :dateTime))
+                (diff (float-time
+                       (time-subtract (org-gcal--parse-calendar-time-string etime)
+                                      (org-gcal--parse-calendar-time-string stime))))
+                (minutes (floor (/ diff 60))))
+      (let ((effort (org-entry-get (point) org-effort-property)))
+        (unless effort
+          (message "need to set effort - minutes %S" minutes)
+          (org-entry-put (point)
+                         org-effort-property
+                         (apply #'format "%d:%02d" (cl-floor minutes 60)))))))
+  (add-hook 'org-gcal-after-update-entry-functions #'my-org-gcal-set-effort)
+#+END_SRC
+
+* Troubleshooting
+** Debugging
+
+Because we used the [[https://github.com/kiwanami/emacs-deferred][deferred.el]] to perform asynchronous operations like calling
+~request~ (via [[https://github.com/tkf/emacs-request/blob/master/request-deferred.el][~request-deferred~]]), normal Emacs debugging and stack traces tend
+not to be as useful as usual. The best way to debug is to run ~M-x
+org-gcal-toggle-debug~, which sets a variety of debugging variables to ease
+debugging. The old values of the variables are saved so they can be restored by
+another call to ~M-x org-gcal-toggle-debug~.
+
+One of the most useful things this enables is logging of HTTP requests. Open the
+~*request-log*~ buffer to see all requests issued by this library.
+
+** Errors
+*** Duplicate ID
 
 You get an error like this:
 
