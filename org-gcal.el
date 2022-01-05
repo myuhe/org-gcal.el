@@ -1329,12 +1329,18 @@ For valid values of EXISTING-MODE see
   "Request OAuth authorization at AUTH-URL by launching `browse-url'.
   CLIENT-ID is the client id provided by the provider.
   It returns the code provided by the service."
-  (browse-url (concat org-gcal-auth-url
-                      "?client_id=" (url-hexify-string org-gcal-client-id)
-                      "&response_type=code"
-                      "&redirect_uri=" (url-hexify-string "urn:ietf:wg:oauth:2.0:oob")
-                      "&scope=" (url-hexify-string org-gcal-resource-url)))
-  (read-string "Enter the code your browser displayed: "))
+  (let* ((gcal-auth-url
+          (concat org-gcal-auth-url
+                  "?client_id=" (url-hexify-string org-gcal-client-id)
+                  "&response_type=code"
+                  "&redirect_uri=" (url-hexify-string "urn:ietf:wg:oauth:2.0:oob")
+                  "&scope=" (url-hexify-string org-gcal-resource-url)))
+         (prompt
+          (format
+           "Please visit (if it doesn't open automatically): %s\n\nEnter the code your browser displayed:"
+           gcal-auth-url)))
+    (browse-url gcal-auth-url)
+    (read-string prompt)))
 
 (defun org-gcal-request-token ()
   "Refresh OAuth access at TOKEN-URL.
