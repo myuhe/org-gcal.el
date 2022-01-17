@@ -1428,26 +1428,30 @@ For valid values of EXISTING-MODE see
   (save-excursion
     (goto-char (point-min))
     (while (re-search-forward org-heading-regexp nil t)
-      (condition-case nil
-          (goto-char (cdr (org-gcal--timestamp-successor)))
-        (error (error "Org-gcal error: Couldn't parse %s"
-                      (buffer-file-name))))
-      (let ((elem (org-element-headline-parser (point-max) t))
-            (tobj (cadr (org-element-timestamp-parser))))
-        (when (>
-               (time-to-seconds (time-subtract (current-time) (days-to-time org-gcal-up-days)))
-               (time-to-seconds (encode-time 0  (if (plist-get tobj :minute-end)
-                                                    (plist-get tobj :minute-end) 0)
-                                             (if (plist-get tobj :hour-end)
-                                                 (plist-get tobj :hour-end) 24)
-                                             (plist-get tobj :day-end)
-                                             (plist-get tobj :month-end)
-                                             (plist-get tobj :year-end))))
-          (org-gcal--notify "Archived event." (org-element-property :title elem))
-          (let ((kill-ring kill-ring)
-                (select-enable-clipboard nil))
-            (org-archive-subtree)))))
-    (save-buffer)))
+      ; Go to beginning of line to parse the headline
+      (beginning-of-line)
+      (let ((elem (org-element-headline-parser (point-max) t)))
+
+        ; Go to next timestamp to parse it
+        (condition-case nil
+            (goto-char (cdr (org-gcal--timestamp-successor)))
+          (error (error "Org-gcal error: Couldn't parse %s"
+                        (buffer-file-name))))
+        (let ((tobj (cadr (org-element-timestamp-parser))))
+          (when (>
+                 (time-to-seconds (time-subtract (current-time) (days-to-time org-gcal-up-days)))
+                 (time-to-seconds (encode-time 0 (if (plist-get tobj :minute-end)
+                                                      (plist-get tobj :minute-end) 0)
+                                               (if (plist-get tobj :hour-end)
+                                                   (plist-get tobj :hour-end) 24)
+                                               (plist-get tobj :day-end)
+                                               (plist-get tobj :month-end)
+                                               (plist-get tobj :year-end))))
+            (org-gcal--notify "Archived event." (org-element-property :title elem))
+            (let ((kill-ring kill-ring)
+                  (select-enable-clipboard nil))
+              (org-archive-subtree))))))
+      (save-buffer)))
 
 (defun org-gcal--save-sexp (data file)
   "Print Lisp object DATA to FILE, creating it if necessary."
