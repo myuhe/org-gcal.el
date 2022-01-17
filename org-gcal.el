@@ -309,13 +309,14 @@ See: https://developers.google.com/calendar/v3/reference/events/insert."
 (defun org-gcal-events-url (calendar-id)
   "URL used to request access to events on calendar CALENDAR-ID."
   (format "https://www.googleapis.com/calendar/v3/calendars/%s/events"
-          calendar-id))
+          (url-hexify-string calendar-id)))
 
 (defun org-gcal-instances-url (calendar-id event-id)
   "URL used to request access to instances of recurring event EVENT-ID on \
 calendar CALENDAR-ID."
   (format "https://www.googleapis.com/calendar/v3/calendars/%s/events/%s/instances"
-          calendar-id event-id))
+          (url-hexify-string calendar-id)
+          (url-hexify-string event-id)))
 
 (cl-defstruct (org-gcal--event-entry
                (:constructor org-gcal--event-entry-create))
@@ -1880,7 +1881,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
          (concat
           (org-gcal-events-url calendar-id)
           (when event-id
-            (concat "/" event-id)))
+            (concat "/" (url-hexify-string event-id))))
          :type (cond
                 (skip-export "GET")
                 (event-id "PATCH")
