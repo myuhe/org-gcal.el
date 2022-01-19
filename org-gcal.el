@@ -1248,8 +1248,15 @@ For valid values of EXISTING-MODE see
       ;; Fill in Calendar ID if not already present.
       (unless calendar-id
         (setq calendar-id
-              (completing-read "Calendar ID: "
-                               (mapcar #'car org-gcal-file-alist)))
+              ;; Completes read with prompts like "CALENDAR-FILE (CALENDAR-ID)",
+              ;; and then uses ‘replace-regexp-in-string’ to extract just
+              ;; CALENDAR-ID.
+              (replace-regexp-in-string
+               ".*(\\(.*?\\))$" "\\1"
+               (completing-read "Calendar ID: "
+                                (mapcar
+                                 (lambda (x) (format "%s (%s)" (cdr x) (car x)))
+                                 org-gcal-fetch-file-alist))))
         (org-entry-put (point) org-gcal-calendar-id-property calendar-id))
       (when (equal managed "gcal")
         (unless existing-mode
