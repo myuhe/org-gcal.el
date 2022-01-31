@@ -1166,6 +1166,53 @@ Second paragraph
   ;;          "2021-03-04T03:30:00+0800"))
   )
 
+(ert-deftest org-gcal-test--headline-archive-old-event ()
+  "Check that `org-gcal--archive-old-event' parses headlines correctly.
+Regression test for https://github.com/kidd/org-gcal.el/issues/172 .
+
+Also tests that the `org-gcal--archive-old-event' function does
+not loop over and over, archiving the same entry because it is
+under another heading in the same file."
+  (let ((org-archive-location "::* Archived")  ; Make the archive this same buffer
+        (test-time "2022-01-30 Sun 01:23")
+        (buf "\
+* Event Title
+:PROPERTIES:
+:org-gcal-managed: something
+:END:
+<2021-01-01 Fri 12:34-14:35>
+"))
+    (org-test-at-time (format "<%s>" test-time)
+      (org-test-with-temp-text-in-file
+          buf
+        (let* ((buf-category (org-get-category (point-max) 'force-refresh))
+               (target-buf (format "\
+* Archived
+
+** Event Title
+:PROPERTIES:
+:org-gcal-managed: something
+:ARCHIVE_TIME: %s
+:ARCHIVE_FILE: %s
+:ARCHIVE_CATEGORY: %s
+:END:
+<2021-01-01 Fri 12:34-14:35>
+" test-time file buf-category)))  ; The variable `file' is the current file name
+                                  ; under the macro `org-test-with-temp-text-in-file'
+          ;
+          ; The old error: try to parse a headline when not starting at the beginning
+          (should-error
+           (progn (goto-char 2)
+                  (org-element-headline-parser (point-max) t))
+           :type 'error)
+
+          (org-gcal--archive-old-event)
+          (should
+           (equal
+            target-buf
+            (buffer-substring-no-properties (point-min) (point-max)))))))))
+
+(ert 'org-gcal-test--headline-archive-old-event)
 
 ;;; TODO: Figure out mocking for POST/PATCH followed by GET
 ;;; - ‘mock‘ might work for this - the argument list must be specified up
