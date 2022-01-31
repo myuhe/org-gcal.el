@@ -25,6 +25,8 @@ screen that says "This app isn't verified". You will need to click on the
 
 * Requirements
 
+- Emacs 26+
+- [[https://orgmode.org/][Org mode]] 9.3+
 - [[https://github.com/tkf/emacs-request][tkf/emacs-request]]
 - [[https://github.com/jwiegley/alert][jwiegley/alert]]
 - [[https://elpa.gnu.org/packages/persist.html][~persist~]]

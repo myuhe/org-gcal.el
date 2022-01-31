@@ -1,7 +1,7 @@
 ;;; org-gcal-test.el --- Tests for org-gcal.el -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2019 Robert Irelan
-;; Package-Requires: ((org-gcal) (el-mock) (emacs "24.3"))
+;; Package-Requires: ((org-gcal) (el-mock) (emacs "26"))
 
 ;; Author: Robert Irelan <rirelan@gmail.com>
 
@@ -66,6 +66,10 @@
  },
  \"reminders\": {
   \"useDefault\": true
+ },
+ \"source\": {
+  \"url\": \"https://google.com\",
+  \"title\": \"Google\"
  }
 }
 ")
@@ -78,10 +82,10 @@
   (replace-regexp-in-string
    "\"dateTime\": \"2019-10-06T17:00:00-07:00\""
    "\"date\": \"2019-10-06\""
-  (replace-regexp-in-string
-   "\"dateTime\": \"2019-10-06T21:00:00-07:00\""
-   "\"date\": \"2019-10-07\""
-                            org-gcal-test-event-json)))
+   (replace-regexp-in-string
+    "\"dateTime\": \"2019-10-06T21:00:00-07:00\""
+    "\"date\": \"2019-10-07\""
+                             org-gcal-test-event-json)))
 
 (defmacro org-gcal-test--with-temp-buffer (contents &rest body)
   "Create a ‘org-mode’ enabled temp buffer with CONTENTS.
@@ -143,6 +147,8 @@ object."
                     "\"12344321\""))
      (should (equal (org-element-property :LOCATION elem)
                     "Foobar's desk"))
+     (should (equal (org-element-property :LINK elem)
+              "[[https://google.com][Google]]"))
      (should (equal (org-element-property :TRANSPARENCY elem)
                     "opaque"))
      (should (equal (org-element-property :CALENDAR-ID elem)
@@ -174,6 +180,7 @@ object."
 :PROPERTIES:
 :ETag:     \"9999\"
 :LOCATION: Somewhere else
+:link: [[https://yahoo.com][Yahoo!]]
 :TRANSPARENCY: transparent
 :calendar-id: foo@foobar.com
 :entry-id:       foobar1234/foo@foobar.com
@@ -194,6 +201,8 @@ Old event description
                     "\"12344321\""))
      (should (equal (org-element-property :LOCATION elem)
                     "Foobar's desk"))
+     (should (equal (org-element-property :LINK elem)
+              "[[https://google.com][Google]]"))
      (should (equal (org-element-property :TRANSPARENCY elem)
                     "opaque"))
      (should (equal (org-element-property :CALENDAR-ID elem)
@@ -228,6 +237,7 @@ Second paragraph
 :PROPERTIES:
 :ETag:     \"9999\"
 :LOCATION: Somewhere else
+:link: [[https://yahoo.com][Yahoo!]]
 :calendar-id: foo@foobar.com
 :entry-id:       foobar1234/foo@foobar.com
 :END:
@@ -252,6 +262,8 @@ Old event description
                         "\"12344321\""))
          (should (equal (org-element-property :LOCATION elem)
                         "Foobar's desk"))
+         (should (equal (org-element-property :LINK elem)
+                        "[[https://google.com][Google]]"))
          (should (equal (org-element-property :CALENDAR-ID elem)
                         "foo@foobar.com"))
          (should (equal (org-element-property :ENTRY-ID elem)
@@ -286,6 +298,8 @@ Second paragraph
                         "\"12344321\""))
          (should (equal (org-element-property :LOCATION elem)
                         "Foobar's desk"))
+         (should (equal (org-element-property :LINK elem)
+                        "[[https://google.com][Google]]"))
          (should (equal (org-element-property :TRANSPARENCY elem)
                         "opaque"))
          (should (equal (org-element-property :CALENDAR-ID elem)
@@ -329,6 +343,7 @@ Second paragraph
 :PROPERTIES:
 :ETag:     \"9999\"
 :LOCATION: Somewhere else
+:link: [[https://yahoo.com][Yahoo!]]
 :TRANSPARENCY: transparent
 :calendar-id: foo@foobar.com
 :entry-id:       foobar1234/foo@foobar.com
@@ -355,6 +370,8 @@ Old event description
                         "\"12344321\""))
          (should (equal (org-element-property :LOCATION elem)
                         "Foobar's desk"))
+         (should (equal (org-element-property :LINK elem)
+                        "[[https://google.com][Google]]"))
          (should (equal (org-element-property :TRANSPARENCY elem)
                         "opaque"))
          (should (equal (org-element-property :CALENDAR-ID elem)
@@ -393,6 +410,8 @@ Second paragraph
                         "\"12344321\""))
          (should (equal (org-element-property :LOCATION elem)
                         "Foobar's desk"))
+         (should (equal (org-element-property :LINK elem)
+                        "[[https://google.com][Google]]"))
          (should (equal (org-element-property :TRANSPARENCY elem)
                         "opaque"))
          (should (equal (org-element-property :CALENDAR-ID elem)
@@ -435,6 +454,7 @@ SCHEDULED: <9999-10-06 Sun 17:00-21:00>
 :PROPERTIES:
 :ETag:     \"9999\"
 :LOCATION: Somewhere else
+:link: [[https://yahoo.com][Yahoo!]]
 :TRANSPARENCY: transparent
 :calendar-id: foo@foobar.com
 :entry-id:       foobar1234/foo@foobar.com
@@ -457,6 +477,8 @@ Old event description
                      "\"12344321\""))
       (should (equal (org-element-property :LOCATION elem)
                      "Foobar's desk"))
+      (should (equal (org-element-property :LINK elem)
+                     "[[https://google.com][Google]]"))
       (should (equal (org-element-property :TRANSPARENCY elem)
                      "opaque"))
       (should (equal (org-element-property :CALENDAR-ID elem)
@@ -484,6 +506,7 @@ Second paragraph
 * Old event summary
 :PROPERTIES:
 :LOCATION: Somewhere else
+:link: [[https://yahoo.com][Yahoo!]]
 :TRANSPARENCY: transparent
 :calendar-id: foo@foobar.com
 :entry-id:       ABCD-EFGH
@@ -504,6 +527,8 @@ Old event description
                      "\"12344321\""))
       (should (equal (org-element-property :LOCATION elem)
                      "Foobar's desk"))
+      (should (equal (org-element-property :LINK elem)
+                     "[[https://google.com][Google]]"))
       (should (equal (org-element-property :TRANSPARENCY elem)
                      "opaque"))
       (should (equal (org-element-property :CALENDAR-ID elem)
@@ -537,6 +562,7 @@ Second paragraph
 :PROPERTIES:
 :ETag:     \"12344321\"
 :LOCATION: Foobar's desk
+:link: [[https://google.com][Google]]
 :TRANSPARENCY: opaque
 :calendar-id: foo@foobar.com
 :entry-id:       foobar1234/foo@foobar.com
@@ -554,7 +580,8 @@ Second paragraph
     (stub org-generic-id-add-location => nil)
     (stub org-gcal-request-token => (deferred:succeed nil))
     (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
-                                "My event summary" "Foobar's desk" 
+                                "My event summary" "Foobar's desk"
+                                `((url . "https://google.com") (title . "Google"))
                                 "My event description\n\nSecond paragraph"
                                 "foo@foobar.com"
                                 * "opaque" "\"12344321\"" "foobar1234"
@@ -571,6 +598,7 @@ returned from the Google Calendar API."
 :PROPERTIES:
 :ETag:     \"12344321\"
 :LOCATION: Original location
+:link: [[https://yahoo.com][Yahoo!]]
 :TRANSPARENCY: transparent
 :calendar-id: foo@foobar.com
 :entry-id:       foobar1234/foo@foobar.com
@@ -610,6 +638,8 @@ Original second paragraph
                            "\"12344321\""))
             (should (equal (org-element-property :LOCATION elem)
                            "Foobar's desk"))
+            (should (equal (org-element-property :LINK elem)
+                           "[[https://google.com][Google]]"))
             (should (equal (org-element-property :TRANSPARENCY elem)
                            "opaque"))
             (should (equal (org-element-property :CALENDAR-ID elem)
@@ -641,6 +671,7 @@ set to \"gcal\"."
 :PROPERTIES:
 :ETag:     \"12344321\"
 :LOCATION: Foobar's desk
+:link: [[https://google.com][Google]]
 :TRANSPARENCY: opaque
 :calendar-id: foo@foobar.com
 :entry-id:       foobar1234/foo@foobar.com
@@ -660,6 +691,7 @@ Second paragraph
       (mock (y-or-n-p *) => nil)
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                   "My event summary" "Foobar's desk"
+                                  `((url . "https://google.com") (title . "Google"))
                                   "My event description\n\nSecond paragraph"
                                   "foo@foobar.com"
                                   * "opaque" "\"12344321\"" "foobar1234"
@@ -676,6 +708,7 @@ set to \"org\"."
 :PROPERTIES:
 :ETag:     \"12344321\"
 :LOCATION: Foobar's desk
+:link: [[https://google.com][Google]]
 :TRANSPARENCY: opaque
 :calendar-id: foo@foobar.com
 :entry-id:       foobar1234/foo@foobar.com
@@ -694,6 +727,7 @@ Second paragraph
       (stub org-gcal-request-token => (deferred:succeed nil))
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                   "My event summary" "Foobar's desk"
+                                  `((url . "https://google.com") (title . "Google"))
                                   "My event description\n\nSecond paragraph"
                                   "foo@foobar.com"
                                   * "opaque" "\"12344321\"" "foobar1234"
@@ -728,6 +762,7 @@ Second paragraph
       (mock (y-or-n-p *) => nil)
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                   "My event summary" "Foobar's desk"
+                                  nil
                                   "My event description\n\nSecond paragraph"
                                   "foo@foobar.com"
                                   * "opaque" "\"12344321\"" nil
@@ -745,6 +780,7 @@ set to \"org\"."
 :PROPERTIES:
 :ETag:     \"12344321\"
 :LOCATION: Foobar's desk
+:link: [[https://google.com][Google]]
 :TRANSPARENCY: opaque
 :calendar-id: foo@foobar.com
 :END:
@@ -762,6 +798,7 @@ Second paragraph
       (stub org-gcal-request-token => (deferred:succeed nil))
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                   "My event summary" "Foobar's desk"
+                                  `((url . "https://google.com") (title . "Google"))
                                   "My event description\n\nSecond paragraph"
                                   "foo@foobar.com"
                                   * "opaque" "\"12344321\"" nil
@@ -779,6 +816,7 @@ Second paragraph
 :PROPERTIES:
 :ETag:     \"12344321\"
 :LOCATION: Foobar's desk
+:link: [[https://google.com][Google]]
 :TRANSPARENCY: opaque
 :calendar-id: foo@foobar.com
 :ID:       foobar1234/foo@foobar.com
@@ -797,6 +835,7 @@ Second paragraph
     (stub org-gcal-request-token => (deferred:succeed nil))
     (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                 "My event summary" "Foobar's desk"
+                                `((url . "https://google.com") (title . "Google"))
                                 "My event description\n\nSecond paragraph"
                                 "foo@foobar.com"
                                 * "opaque" "\"12344321\"" "foobar1234"
@@ -809,6 +848,7 @@ Second paragraph
 :PROPERTIES:
 :ETag:     \"12344321\"
 :LOCATION: Foobar's desk
+:link: [[https://google.com][Google]]
 :TRANSPARENCY: opaque
 :calendar-id: foo@foobar.com
 :ID:             hello-world
@@ -828,6 +868,7 @@ Second paragraph
     (stub org-gcal-request-token => (deferred:succeed nil))
     (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                 "My event summary" "Foobar's desk"
+                                `((url . "https://google.com") (title . "Google"))
                                 "My event description\n\nSecond paragraph"
                                 "foo@foobar.com"
                                 * "opaque" "\"12344321\"" "foobar1234"
@@ -844,6 +885,7 @@ an org-gcal Calendar Event ID can't be retrieved from the current entry."
 * My event summary
 :PROPERTIES:
 :LOCATION: Foobar's desk
+:link: [[https://google.com][Google]]
 :TRANSPARENCY: opaque
 :calendar-id: foo@foobar.com
 :END:
@@ -861,6 +903,7 @@ Second paragraph
       (stub org-gcal-request-token => (deferred:succeed nil))
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                   "My event summary" "Foobar's desk"
+                                  `((url . "https://google.com") (title . "Google"))
                                   "My event description\n\nSecond paragraph"
                                   "foo@foobar.com"
                                   * "opaque" nil nil
@@ -871,6 +914,7 @@ Second paragraph
 * My event summary
 :PROPERTIES:
 :LOCATION: Foobar's desk
+:link: [[https://google.com][Google]]
 :TRANSPARENCY: opaque
 :calendar-id: foo@foobar.com
 :entry-id: ABCD-EFGH
@@ -889,6 +933,7 @@ Second paragraph
       (stub org-gcal-request-token => (deferred:succeed nil))
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                   "My event summary" "Foobar's desk"
+                                  `((url . "https://google.com") (title . "Google"))
                                   "My event description\n\nSecond paragraph"
                                   "foo@foobar.com"
                                   * "opaque" nil nil
@@ -911,7 +956,7 @@ org-gcal properties with sane default values."
     (stub org-gcal-request-token => (deferred:succeed nil))
     (mock (org-gcal--post-event "2019-10-06T17:00:00+0000" "2019-10-06T21:00:00+0000"
                                 "My event summary" nil
-                                nil
+                                nil nil
                                 "foo@foobar.com"
                                 * "opaque" nil nil
                                 * * *))
@@ -937,7 +982,7 @@ CLOCK: [2019-06-06 Thu 17:00]--[2019-06-06 Thu 18:00] => 1:00
           (lambda (_p initial-contents) initial-contents)))
       (mock (org-gcal--post-event "2019-10-06T17:00:00+0000" "2019-10-06T18:00:00+0000"
                                   "My event summary" nil
-                                  nil
+                                  nil nil
                                   "foo@foobar.com"
                                   * "opaque" nil nil
                                   * * *))
@@ -981,6 +1026,7 @@ SCHEDULED: <2019-10-06 Sun 17:00>--<2019-10-07 Mon 21:00>
 :PROPERTIES:
 :ETag:     \"12344321\"
 :LOCATION: Foobar's desk
+:link: [[https://google.com][Google]]
 :TRANSPARENCY: opaque
 :calendar-id: foo@foobar.com
 :entry-id:       foobar1234/foo@foobar.com
@@ -997,6 +1043,7 @@ Second paragraph
     (stub org-gcal-request-token => (deferred:succeed nil))
     (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-07T21:00:00Z"
                                 "My event summary" "Foobar's desk"
+                                `((url . "https://google.com") (title . "Google"))
                                 "My event description\n\nSecond paragraph"
                                 "foo@foobar.com"
                                 * "opaque" "\"12344321\"" "foobar1234"
@@ -1016,6 +1063,7 @@ SCHEDULED: <2019-10-06 Sun 17:00>--<2019-10-07 Mon 21:00>
 :PROPERTIES:
 :ETag:     \"12344321\"
 :LOCATION: Foobar's desk
+:link: [[https://google.com][Google]]
 :TRANSPARENCY: opaque
 :calendar-id: foo@foobar.com
 :entry-id:       foobar1234/foo@foobar.com
@@ -1085,17 +1133,17 @@ Second paragraph
 (ert-deftest org-gcal-test--save-with-full-day-event ()
   "Verify that a full day event will get set correctly."
    (org-gcal-test--with-temp-buffer
-   "* "
-   (org-gcal--update-entry org-gcal-test-calendar-id
-                           org-gcal-test-full-day-event)
-   (org-back-to-heading)
+    "* "
+    (org-gcal--update-entry org-gcal-test-calendar-id
+                            org-gcal-test-full-day-event)
+    (org-back-to-heading)
    ;; Check contents of "org-gcal" drawer
-   (re-search-forward ":org-gcal:")
-   (let ((elem (org-element-at-point)))
-     (should (equal (buffer-substring-no-properties
-                     (org-element-property :contents-begin elem)
-                     (org-element-property :contents-end elem))
-                    "\
+    (re-search-forward ":org-gcal:")
+    (let ((elem (org-element-at-point)))
+      (should (equal (buffer-substring-no-properties
+                      (org-element-property :contents-begin elem)
+                      (org-element-property :contents-end elem))
+                     "\
 <2019-10-06 Sun>
 
 My event description
@@ -1108,17 +1156,17 @@ Second paragraph
   (let (
         (org-gcal-local-timezone "Europe/London"))
    (org-gcal-test--with-temp-buffer
-   "* "
-   (org-gcal--update-entry org-gcal-test-calendar-id
-                           org-gcal-test-full-day-event)
-   (org-back-to-heading)
+    "* "
+    (org-gcal--update-entry org-gcal-test-calendar-id
+                            org-gcal-test-full-day-event)
+    (org-back-to-heading)
    ;; Check contents of "org-gcal" drawer
-   (re-search-forward ":org-gcal:")
-   (let ((elem (org-element-at-point)))
-     (should (equal (buffer-substring-no-properties
-                     (org-element-property :contents-begin elem)
-                     (org-element-property :contents-end elem))
-                    "\
+    (re-search-forward ":org-gcal:")
+    (let ((elem (org-element-at-point)))
+      (should (equal (buffer-substring-no-properties
+                      (org-element-property :contents-begin elem)
+                      (org-element-property :contents-end elem))
+                     "\
 <2019-10-06 Sun>
 
 My event description
@@ -1153,7 +1201,7 @@ Second paragraph
            "2021-03-03T19:30:00+0000"))
   (should (equal
            (org-gcal--convert-time-to-local-timezone "2021-03-03T11:30:00-08:00" "Europe/London")
-           "2021-03-03T19:30:00+0000"))
+           "2021-03-03T19:30:00+0000")))
   ;; FIXME: Passed in local with Emacs 26.3 and 27.1, Failed in GitHub CI
   ;; (should (equal
   ;;          (org-gcal--convert-time-to-local-timezone "2021-03-03T11:30:00-08:00" "Europe/Oslo")
@@ -1167,7 +1215,7 @@ Second paragraph
   ;; (should (equal
   ;;          (org-gcal--convert-time-to-local-timezone "2021-03-03T11:30:00-08:00" "Asia/Shanghai")
   ;;          "2021-03-04T03:30:00+0800"))
-  )
+
 
 (ert-deftest org-gcal-test--headline-archive-old-event ()
   "Check that `org-gcal--archive-old-event' parses headlines correctly.
