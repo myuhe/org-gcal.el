@@ -923,8 +923,8 @@ Based on ‘org-with-point-at’ but doesn’t widen the buffer."
                                                                (org-gcal--sync-get-update-existing))))))
                                :catch
                                (lambda (err)
-                                 (message "org-gcal-sync-buffer: event %S: error: %s"
-                                          time-desc err))
+                                 (message "org-gcal-sync-buffer: at %S event %S: error: %s"
+                                          marker-for-post time-desc err))
                                :finally
                                (lambda (_)
                                  (deferred:succeed marker))))))
@@ -1823,9 +1823,10 @@ heading."
       (org-gcal--maybe-remove-entry))))
 
 (defun org-gcal--maybe-remove-entry ()
-  "Remove the entry at the current heading, depending on the value of \
-  ‘org-gcal-remove-api-cancelled-events’."
-  (when-let ((org-gcal-remove-api-cancelled-events)
+  "Maybe remove the entry at the current heading
+
+Depends on the value of ‘org-gcal-remove-api-cancelled-events’."
+  (when-let (((and org-gcal-remove-api-cancelled-events))
              (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
              ((or (eq org-gcal-remove-api-cancelled-events t)
                   (y-or-n-p (format "Delete Org headline for cancelled event\n%s? "
@@ -1911,8 +1912,12 @@ object."
              ((not (eq error-thrown nil))
               (org-gcal--notify
                (concat "Status code: " (number-to-string status-code))
-               (pp-to-string error-thrown))
-              (error "Got error %S: %S" status-code error-thrown))
+               (format "%s %s: %s"
+                       calendar-id
+                       event-id
+                       (pp-to-string error-thrown)))
+              (error "org-gcal--get-event: Got error %S for %s %s: %S"
+                     status-code calendar-id event-id error-thrown))
              ;; Fetch was successful.
              (t response))))))))
 
@@ -1951,7 +1956,9 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                    (cond
                     ((null etag) nil)
                     ((null event-id)
-                     (error "Event cannot have ETag set when event ID absent"))
+                     (error "org-gcal--post-event: %s %s %s: %s"
+                            (point-marker) calendar-id event-id
+                            "Event cannot have ETag set when event ID absent"))
                     (t
                      `(("If-Match" . ,etag)))))
          :parser 'org-gcal--json-read
