@@ -1699,8 +1699,7 @@ arguments as passed to this function and the point moved to the beginning of the
 heading."
   (unless (org-at-heading-p)
     (user-error "Must be on Org-mode heading."))
-  (let* ((smry  (or (plist-get event :summary)
-                    "busy"))
+  (let* ((smry  (plist-get event :summary))
          (desc  (plist-get event :description))
          (loc   (plist-get event :location))
          (source (plist-get event :source))
@@ -1725,7 +1724,13 @@ heading."
          (recurrence (plist-get event :recurrence))
          (elem))
     (when loc (replace-regexp-in-string "\n" ", " loc))
-    (org-edit-headline smry)
+    (org-edit-headline
+     (cond
+      (smry smry)
+      ((or (null (org-gcal--headline))
+           (string-empty-p (org-gcal--headline)))
+       "busy")
+      (t (org-gcal--headline))))
     (org-entry-put (point) org-gcal-etag-property etag)
     (when recurrence (org-entry-put (point) "recurrence" (format "%s" recurrence)))
     (when loc (org-entry-put (point) "LOCATION" loc))
