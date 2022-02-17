@@ -1318,9 +1318,13 @@ For valid values of EXISTING-MODE see
                               event-id nil skip-import skip-export)))))
 
 ;;;###autoload
-(defun org-gcal-delete-at-point ()
-  "Delete entry at point to current calendar."
-  (interactive)
+(defun org-gcal-delete-at-point (&optional clear-gcal-info)
+  "Delete entry at point to current calendar.
+
+If called with prefix or with CLEAR-GCAL-INFO non-nil, will clear calendar info
+from the entry even if deleting the event from the server fails.  Use this to
+delete calendar info from events on calendars you no longer have access to."
+  (interactive "P")
   (org-gcal--ensure-token)
   (save-excursion
     ;; Delete entry at point in org-agenda buffer.
@@ -1335,16 +1339,26 @@ For valid values of EXISTING-MODE see
            (event-id (org-gcal--get-id (point)))
            (etag (org-entry-get (point) org-gcal-etag-property))
            (calendar-id
-            (org-entry-get (point) org-gcal-calendar-id-property)))
+            (org-entry-get (point) org-gcal-calendar-id-property))
+           (delete-error))
       (if (and event-id
                (y-or-n-p (format "Do you really want to delete event?\n\n%s\n\n" smry)))
-          (deferred:$
+          (deferred:try
             (org-gcal--delete-event calendar-id event-id etag (copy-marker marker))
-            ;; Delete :org-gcal: drawer after deleting event. This will preserve
-            ;; the ID for links, but will ensure functions in this module don’t
-            ;; identify the entry as a Calendar event.
-            (deferred:nextc it
-              (lambda (_unused)
+            :catch
+            (lambda (err)
+              (message "Setting delete-error to %S" err)
+              (setq delete-error err))
+            :finally
+            (lambda (_unused)
+              ;; Only clear org-gcal from headline if successful or we were
+              ;; forced to.
+              (message "clear-gcal-info delete-error: %S %S"
+                       clear-gcal-info delete-error)
+              (when (or clear-gcal-info (null delete-error))
+                ;; Delete :org-gcal: drawer after deleting event. This will preserve
+                ;; the ID for links, but will ensure functions in this module don’t
+                ;; identify the entry as a Calendar event.
                 (org-with-point-at marker
                   (when (re-search-forward
                          (format
@@ -1353,14 +1367,16 @@ For valid values of EXISTING-MODE see
                          (save-excursion (outline-next-heading) (point))
                          'noerror)
                     (replace-match "" 'fixedcase))
-                  (deferred:succeed nil))))
-            ;; Finally cancel and delete the event if this is configured.
-            (deferred:nextc it
-              (lambda (_unused)
+                  (org-entry-delete marker org-gcal-calendar-id-property)
+                  (org-entry-delete marker org-gcal-entry-id-property))
+                ;; Finally cancel and delete the event if this is configured.
                 (org-with-point-at marker
                   (org-back-to-heading)
-                  (org-gcal--handle-cancelled-entry)
-                  (deferred:succeed nil)))))
+                  (org-gcal--handle-cancelled-entry)))
+              (if delete-error
+                  (error "org-gcal-delete-at-point: for %s %s: error: %S"
+                         calendar-id event-id delete-error)
+                (deferred:succeed nil))))
         (deferred:succeed nil)))))
 
 (defun org-gcal-request-authorization ()
