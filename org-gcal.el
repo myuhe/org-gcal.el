@@ -150,8 +150,8 @@ The events will always be marked cancelled before they’re removed if
           (const :tag "Always remove without prompting" t)))
 
 (defcustom org-gcal-remove-events-with-cancelled-todo nil
-  "Whether to attempt to remove Org-mode headlines for events marked with \
-‘org-gcal-cancelled-todo-keyword’.
+  "Whether to attempt to remove Org-mode headlines for cancelled events.
+Specifically effects events marked with ‘org-gcal-cancelled-todo-keyword’.
 
 By default, this is set to nil so that if you decline removing an event when
 ‘org-gcal-remove-api-cancelled-events’ is set to ‘ask’, you won’t be prompted
@@ -314,8 +314,8 @@ See: https://developers.google.com/calendar/v3/reference/events/insert."
           (url-hexify-string calendar-id)))
 
 (defun org-gcal-instances-url (calendar-id event-id)
-  "URL used to request access to instances of recurring event EVENT-ID on \
-calendar CALENDAR-ID."
+  "URL used to request access to instances of recurring events.
+Returns a URL for recurrent event EVENT-ID on calendar CALENDAR-ID."
   (format "https://www.googleapis.com/calendar/v3/calendars/%s/events/%s/instances"
           (url-hexify-string calendar-id)
           (url-hexify-string event-id)))
@@ -1119,8 +1119,8 @@ This will also update the stored ID locations using
 (defun org-gcal--get-time-and-desc ()
   "Get the timestamp and description of the event at point.
 
-  Return a plist with :start, :end, and :desc keys. The value for a key is nil if
-  not present."
+  Return a plist with :start, :end, and :desc keys. The value for a key is nil
+  if not present."
   (let (start end desc tobj elem)
     (save-excursion
       (org-gcal--back-to-heading)
@@ -1605,8 +1605,8 @@ delete calendar info from events on calendars you no longer have access to."
         :sec  (string-to-number (org-gcal--safe-substring str 17 19))))
 
 (defun org-gcal--parse-calendar-time (time)
-  "Parse TIME, the start or end time object from a Calendar API Events \
-  resource, into an Emacs time object."
+  "Parse TIME, the start or end time object from Calendar API Events resource.
+Return an Emacs time object from ‘encode-time'."
   (org-gcal--parse-calendar-time-string
    (or (plist-get time :dateTime)
        (plist-get time :date))))
