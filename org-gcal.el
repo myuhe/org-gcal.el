@@ -988,6 +988,11 @@ Calendar. For SILENT and FILTER-DATE see ‘org-gcal-sync-buffer’."
      deferred:debug-on-signal t)
     (message "org-gcal-debug ENABLED"))))
 
+(defun org-gcal--headline ()
+  "Get bare headline at current point."
+  (substring-no-properties
+   (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment)))
+
 (defun org-gcal--filter (items)
   "Filter ITEMS on an AND of `org-gcal-fetch-event-filters' functions.
 Run each element from ITEMS through all of the filters.  If any
@@ -1227,8 +1232,7 @@ For valid values of EXISTING-MODE see
            (skip-export skip-export)
            (marker (point-marker))
            (elem (org-element-headline-parser (point-max) t))
-           (smry (substring-no-properties
-                  (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment)))
+           (smry (org-gcal--headline))
            (loc (org-entry-get (point) "LOCATION"))
            (source
             (when-let ((link-string
@@ -1335,7 +1339,7 @@ delete calendar info from events on calendars you no longer have access to."
     (end-of-line)
     (org-gcal--back-to-heading)
     (let* ((marker (point-marker))
-           (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
+           (smry (org-gcal--headline))
            (event-id (org-gcal--get-id (point)))
            (etag (org-entry-get (point) org-gcal-etag-property))
            (calendar-id
@@ -1843,7 +1847,7 @@ heading."
 
 Depends on the value of ‘org-gcal-remove-api-cancelled-events’."
   (when-let (((and org-gcal-remove-api-cancelled-events))
-             (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
+             (smry (org-gcal--headline))
              ((or (eq org-gcal-remove-api-cancelled-events t)
                   (y-or-n-p (format "Delete Org headline for cancelled event\n%s? "
                                     (or smry ""))))))
