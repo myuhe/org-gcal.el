@@ -47,6 +47,7 @@
 (require 'persist)
 (require 'cl-lib)
 (require 'rx)
+(require 'subr-x)
 
 ;; Customization
 ;;; Code:
@@ -1190,12 +1191,15 @@ or nil if no valid link is found."
       (org-mode)
       (goto-char (point-min))
       (when-let ((link-element (car-safe (cdr-safe (org-element-link-parser)))))
-        (list
-         `(url . ,(plist-get link-element :raw-link))
-         `(title
-           . ,(buffer-substring-no-properties
-               (plist-get link-element :contents-begin)
-               (plist-get link-element :contents-end))))))))
+        (let ((link-title-begin (plist-get link-element :contents-begin))
+              (link-title-end (plist-get link-element :contents-end)))
+          (append
+           `((url . ,(plist-get link-element :raw-link)))
+           (when (and link-title-begin link-title-end)
+             `((title
+                . ,(buffer-substring-no-properties
+                    link-title-begin
+                    link-title-end))))))))))
 
 ;;;###autoload
 (defun org-gcal-post-at-point (&optional skip-import skip-export existing-mode)
@@ -1227,7 +1231,11 @@ For valid values of EXISTING-MODE see
                   (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment)))
            (loc (org-entry-get (point) "LOCATION"))
            (source
-            (when-let ((link-string (org-entry-get (point) "link")))
+            (when-let ((link-string
+                        (or (org-entry-get (point) "link")
+                            (nth 0
+                                 (org-entry-get-multivalued-property
+                                  (point) "ROAM_REFS")))))
               (org-gcal--source-from-link-string link-string)))
            (transparency (or (org-entry-get (point) "TRANSPARENCY")
                              org-gcal-default-transparency))
@@ -1702,10 +1710,25 @@ heading."
     (when recurrence (org-entry-put (point) "recurrence" (format "%s" recurrence)))
     (when loc (org-entry-put (point) "LOCATION" loc))
     (when source
-      (org-entry-put (point) "link"
-                     (org-link-make-string
-                      (plist-get source :url)
-                      (plist-get source :title))))
+      (let ((roam-refs
+             (org-entry-get-multivalued-property (point) "ROAM_REFS"))
+            (link (org-entry-get (point) "link")))
+        (cond
+         ;; ROAM_REFS can contain multiple references, but only bare URLs are
+         ;; supported. To make sure we can round-trip between ROAM_REFS and
+         ;; Google Calendar, only import to ROAM_REFS if there is no title in
+         ;; the source, and if ROAM_REFS has at most one entry.
+         ((and (null link)
+               (<= (length roam-refs) 1)
+               (or (null (plist-get source :title))
+                   (string-empty-p (plist-get source :title))))
+          (org-entry-put (point) "ROAM_REFS"
+                         (plist-get source :url)))
+         (t
+          (org-entry-put (point) "link"
+                         (org-link-make-string
+                          (plist-get source :url)
+                          (plist-get source :title)))))))
     (when transparency (org-entry-put (point) "TRANSPARENCY" transparency))
     (when meet
       (org-entry-put
