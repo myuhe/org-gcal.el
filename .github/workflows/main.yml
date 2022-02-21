@@ -8,7 +8,7 @@ jobs:
 
     strategy:
       matrix:
-        emacs_version: ['26.1', '27.1', 'snapshot']
+        emacs_version: ['26.1', '27.1', '28.1', 'snapshot']
         cask_version: ['snapshot']
 
     steps:
@@ -18,7 +18,7 @@ jobs:
     - name: Install Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.6'
+        python-version: '3.9'
         architecture: 'x64'
 
     - name: Install Emacs
