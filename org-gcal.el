@@ -1726,7 +1726,12 @@ heading."
     (when loc (replace-regexp-in-string "\n" ", " loc))
     (org-edit-headline
      (cond
+      ;; Don’t update headline if the new summary is the same as the CANCELLED
+      ;; todo keyword.
+      ((equal smry org-gcal-cancelled-todo-keyword) (org-gcal--headline))
       (smry smry)
+      ;; Set headline to “busy” if there is no existing headline and no summary
+      ;; from server.
       ((or (null (org-gcal--headline))
            (string-empty-p (org-gcal--headline)))
        "busy")
