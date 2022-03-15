@@ -60,7 +60,7 @@ screen that says "This app isn't verified". You will need to click on the
    using it.
 
 6. Once you've set up a consent screen (this is required), click on *Create
-   Credentials* and *Oauth client ID* with Application type /Other/.
+   Credentials* and *Oauth client ID* with Application type /Desktop/ (or /Other/, if /Desktop/ is not present).
 
 7. Click on *Create Client ID*
 
