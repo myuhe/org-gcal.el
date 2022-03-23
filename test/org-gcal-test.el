@@ -104,6 +104,16 @@ always located at the beginning of the buffer."
     (insert json)
     (org-gcal--json-read)))
 
+(defun org-gcal-test--title-to-string (elem)
+  "Get :title from ELEM and convert to string."
+  (let ((prop (org-element-property :title elem)))
+    (cond
+     ((listp prop) (car prop))
+     ((stringp prop) prop)
+     (t
+      (user-error "org-gcal-test--title-to-string: unhandled type for :title prop of elem %S"
+                  elem)))))
+
 (defconst org-gcal-test-event
   (org-gcal-test--json-read-string org-gcal-test-event-json))
 
@@ -121,7 +131,7 @@ always located at the beginning of the buffer."
          ""
          (let ((data '(:foo :bar)))
            (org-gcal--save-sexp data file)
-           (should (equal (buffer-string)
+           (should (string-equal (buffer-string)
                           ""))
            (should (equal (org-gcal--read-file-contents file)
                           `(:token ,data :elem nil)))
@@ -141,7 +151,7 @@ object."
                            org-gcal-test-event)
    (org-back-to-heading)
    (let ((elem (org-element-at-point)))
-     (should (equal (org-element-property :title elem)
+     (should (equal (org-gcal-test--title-to-string elem)
                     "My event summary"))
      (should (equal (org-element-property :ETAG elem)
                     "\"12344321\""))
@@ -195,7 +205,7 @@ Old event description
                            org-gcal-test-event)
    (org-back-to-heading)
    (let ((elem (org-element-at-point)))
-     (should (equal (org-element-property :title elem)
+     (should (equal (org-gcal-test--title-to-string elem)
                     "My event summary"))
      (should (equal (org-element-property :ETAG elem)
                     "\"12344321\""))
@@ -254,7 +264,7 @@ Old event description
                                org-gcal-test-cancelled-event)
        (org-back-to-heading)
        (let ((elem (org-element-at-point)))
-         (should (equal (org-element-property :title elem)
+         (should (equal (org-gcal-test--title-to-string elem)
                         "My event summary"))
          (should (equal (org-element-property :todo-keyword elem)
                         "CANCELLED"))
@@ -290,7 +300,7 @@ Second paragraph
                                org-gcal-test-cancelled-event)
        (org-back-to-heading)
        (let ((elem (org-element-at-point)))
-         (should (equal (org-element-property :title elem)
+         (should (equal (org-gcal-test--title-to-string elem)
                         "My event summary"))
          (should (equal (org-element-property :todo-keyword elem)
                         nil))
@@ -362,7 +372,7 @@ Old event description
                                org-gcal-test-cancelled-event)
        (org-back-to-heading)
        (let ((elem (org-element-at-point)))
-         (should (equal (org-element-property :title elem)
+         (should (equal (org-gcal-test--title-to-string elem)
                         "My event summary"))
          (should (equal (org-element-property :todo-keyword elem)
                         "CANCELLED"))
@@ -402,7 +412,7 @@ Second paragraph
                                org-gcal-test-cancelled-event)
        (org-back-to-heading)
        (let ((elem (org-element-at-point)))
-         (should (equal (org-element-property :title elem)
+         (should (equal (org-gcal-test--title-to-string elem)
                         "My event summary"))
          (should (equal (org-element-property :todo-keyword elem)
                         "CANCELLED"))
@@ -471,7 +481,7 @@ Old event description
                       :raw-value
                       (org-element-property :scheduled elem))
                      "<2019-10-06 Sun 17:00-21:00>"))
-      (should (equal (org-element-property :title elem)
+      (should (equal (org-gcal-test--title-to-string elem)
                      "My event summary"))
       (should (equal (org-element-property :ETAG elem)
                      "\"12344321\""))
@@ -521,7 +531,7 @@ Old event description
                             org-gcal-test-event)
     (org-back-to-heading)
     (let ((elem (org-element-at-point)))
-      (should (equal (org-element-property :title elem)
+      (should (equal (org-gcal-test--title-to-string elem)
                      "My event summary"))
       (should (equal (org-element-property :ETAG elem)
                      "\"12344321\""))
@@ -632,7 +642,7 @@ Original second paragraph
           (org-back-to-heading)
           (should (equal update-entry-hook-called t))
           (let ((elem (org-element-at-point)))
-            (should (equal (org-element-property :title elem)
+            (should (equal (org-gcal-test--title-to-string elem)
                            "My event summary"))
             (should (equal (org-element-property :ETAG elem)
                            "\"12344321\""))

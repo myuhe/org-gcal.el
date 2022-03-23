@@ -47,6 +47,7 @@
 (require 'persist)
 (require 'cl-lib)
 (require 'rx)
+(require 'subr-x)
 
 ;; Customization
 ;;; Code:
@@ -149,8 +150,8 @@ The events will always be marked cancelled before they’re removed if
           (const :tag "Always remove without prompting" t)))
 
 (defcustom org-gcal-remove-events-with-cancelled-todo nil
-  "Whether to attempt to remove Org-mode headlines for events marked with \
-‘org-gcal-cancelled-todo-keyword’.
+  "Whether to attempt to remove Org-mode headlines for cancelled events.
+Specifically effects events marked with ‘org-gcal-cancelled-todo-keyword’.
 
 By default, this is set to nil so that if you decline removing an event when
 ‘org-gcal-remove-api-cancelled-events’ is set to ‘ask’, you won’t be prompted
@@ -313,8 +314,8 @@ See: https://developers.google.com/calendar/v3/reference/events/insert."
           (url-hexify-string calendar-id)))
 
 (defun org-gcal-instances-url (calendar-id event-id)
-  "URL used to request access to instances of recurring event EVENT-ID on \
-calendar CALENDAR-ID."
+  "URL used to request access to instances of recurring events.
+Returns a URL for recurrent event EVENT-ID on calendar CALENDAR-ID."
   (format "https://www.googleapis.com/calendar/v3/calendars/%s/events/%s/instances"
           (url-hexify-string calendar-id)
           (url-hexify-string event-id)))
@@ -922,8 +923,8 @@ Based on ‘org-with-point-at’ but doesn’t widen the buffer."
                                                                (org-gcal--sync-get-update-existing))))))
                                :catch
                                (lambda (err)
-                                 (message "org-gcal-sync-buffer: event %S: error: %s"
-                                          time-desc err))
+                                 (message "org-gcal-sync-buffer: at %S event %S: error: %s"
+                                          marker-for-post time-desc err))
                                :finally
                                (lambda (_)
                                  (deferred:succeed marker))))))
@@ -986,6 +987,11 @@ Calendar. For SILENT and FILTER-DATE see ‘org-gcal-sync-buffer’."
      request-log-buffer-name "*request-log*"
      deferred:debug-on-signal t)
     (message "org-gcal-debug ENABLED"))))
+
+(defun org-gcal--headline ()
+  "Get bare headline at current point."
+  (substring-no-properties
+   (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment)))
 
 (defun org-gcal--filter (items)
   "Filter ITEMS on an AND of `org-gcal-fetch-event-filters' functions.
@@ -1113,8 +1119,8 @@ This will also update the stored ID locations using
 (defun org-gcal--get-time-and-desc ()
   "Get the timestamp and description of the event at point.
 
-  Return a plist with :start, :end, and :desc keys. The value for a key is nil if
-  not present."
+  Return a plist with :start, :end, and :desc keys. The value for a key is nil
+  if not present."
   (let (start end desc tobj elem)
     (save-excursion
       (org-gcal--back-to-heading)
@@ -1190,12 +1196,15 @@ or nil if no valid link is found."
       (org-mode)
       (goto-char (point-min))
       (when-let ((link-element (car-safe (cdr-safe (org-element-link-parser)))))
-        (list
-         `(url . ,(plist-get link-element :raw-link))
-         `(title
-           . ,(buffer-substring-no-properties
-               (plist-get link-element :contents-begin)
-               (plist-get link-element :contents-end))))))))
+        (let ((link-title-begin (plist-get link-element :contents-begin))
+              (link-title-end (plist-get link-element :contents-end)))
+          (append
+           `((url . ,(plist-get link-element :raw-link)))
+           (when (and link-title-begin link-title-end)
+             `((title
+                . ,(buffer-substring-no-properties
+                    link-title-begin
+                    link-title-end))))))))))
 
 ;;;###autoload
 (defun org-gcal-post-at-point (&optional skip-import skip-export existing-mode)
@@ -1223,11 +1232,14 @@ For valid values of EXISTING-MODE see
            (skip-export skip-export)
            (marker (point-marker))
            (elem (org-element-headline-parser (point-max) t))
-           (smry (substring-no-properties
-                  (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment)))
+           (smry (org-gcal--headline))
            (loc (org-entry-get (point) "LOCATION"))
            (source
-            (when-let ((link-string (org-entry-get (point) "link")))
+            (when-let ((link-string
+                        (or (org-entry-get (point) "link")
+                            (nth 0
+                                 (org-entry-get-multivalued-property
+                                  (point) "ROAM_REFS")))))
               (org-gcal--source-from-link-string link-string)))
            (transparency (or (org-entry-get (point) "TRANSPARENCY")
                              org-gcal-default-transparency))
@@ -1310,9 +1322,13 @@ For valid values of EXISTING-MODE see
                               event-id nil skip-import skip-export)))))
 
 ;;;###autoload
-(defun org-gcal-delete-at-point ()
-  "Delete entry at point to current calendar."
-  (interactive)
+(defun org-gcal-delete-at-point (&optional clear-gcal-info)
+  "Delete entry at point to current calendar.
+
+If called with prefix or with CLEAR-GCAL-INFO non-nil, will clear calendar info
+from the entry even if deleting the event from the server fails.  Use this to
+delete calendar info from events on calendars you no longer have access to."
+  (interactive "P")
   (org-gcal--ensure-token)
   (save-excursion
     ;; Delete entry at point in org-agenda buffer.
@@ -1323,20 +1339,30 @@ For valid values of EXISTING-MODE see
     (end-of-line)
     (org-gcal--back-to-heading)
     (let* ((marker (point-marker))
-           (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
+           (smry (org-gcal--headline))
            (event-id (org-gcal--get-id (point)))
            (etag (org-entry-get (point) org-gcal-etag-property))
            (calendar-id
-            (org-entry-get (point) org-gcal-calendar-id-property)))
+            (org-entry-get (point) org-gcal-calendar-id-property))
+           (delete-error))
       (if (and event-id
                (y-or-n-p (format "Do you really want to delete event?\n\n%s\n\n" smry)))
-          (deferred:$
+          (deferred:try
             (org-gcal--delete-event calendar-id event-id etag (copy-marker marker))
-            ;; Delete :org-gcal: drawer after deleting event. This will preserve
-            ;; the ID for links, but will ensure functions in this module don’t
-            ;; identify the entry as a Calendar event.
-            (deferred:nextc it
-              (lambda (_unused)
+            :catch
+            (lambda (err)
+              (message "Setting delete-error to %S" err)
+              (setq delete-error err))
+            :finally
+            (lambda (_unused)
+              ;; Only clear org-gcal from headline if successful or we were
+              ;; forced to.
+              (message "clear-gcal-info delete-error: %S %S"
+                       clear-gcal-info delete-error)
+              (when (or clear-gcal-info (null delete-error))
+                ;; Delete :org-gcal: drawer after deleting event. This will preserve
+                ;; the ID for links, but will ensure functions in this module don’t
+                ;; identify the entry as a Calendar event.
                 (org-with-point-at marker
                   (when (re-search-forward
                          (format
@@ -1345,14 +1371,16 @@ For valid values of EXISTING-MODE see
                          (save-excursion (outline-next-heading) (point))
                          'noerror)
                     (replace-match "" 'fixedcase))
-                  (deferred:succeed nil))))
-            ;; Finally cancel and delete the event if this is configured.
-            (deferred:nextc it
-              (lambda (_unused)
+                  (org-entry-delete marker org-gcal-calendar-id-property)
+                  (org-entry-delete marker org-gcal-entry-id-property))
+                ;; Finally cancel and delete the event if this is configured.
                 (org-with-point-at marker
                   (org-back-to-heading)
-                  (org-gcal--handle-cancelled-entry)
-                  (deferred:succeed nil)))))
+                  (org-gcal--handle-cancelled-entry)))
+              (if delete-error
+                  (error "org-gcal-delete-at-point: for %s %s: error: %S"
+                         calendar-id event-id delete-error)
+                (deferred:succeed nil))))
         (deferred:succeed nil)))))
 
 (defun org-gcal-request-authorization ()
@@ -1587,8 +1615,8 @@ For valid values of EXISTING-MODE see
         :sec  (string-to-number (org-gcal--safe-substring str 17 19))))
 
 (defun org-gcal--parse-calendar-time (time)
-  "Parse TIME, the start or end time object from a Calendar API Events \
-  resource, into an Emacs time object."
+  "Parse TIME, the start or end time object from Calendar API Events resource.
+Return an Emacs time object from ‘encode-time'."
   (org-gcal--parse-calendar-time-string
    (or (plist-get time :dateTime)
        (plist-get time :date))))
@@ -1681,8 +1709,7 @@ arguments as passed to this function and the point moved to the beginning of the
 heading."
   (unless (org-at-heading-p)
     (user-error "Must be on Org-mode heading."))
-  (let* ((smry  (or (plist-get event :summary)
-                    "busy"))
+  (let* ((smry  (plist-get event :summary))
          (desc  (plist-get event :description))
          (loc   (plist-get event :location))
          (source (plist-get event :source))
@@ -1707,15 +1734,41 @@ heading."
          (recurrence (plist-get event :recurrence))
          (elem))
     (when loc (replace-regexp-in-string "\n" ", " loc))
-    (org-edit-headline smry)
+    (org-edit-headline
+     (cond
+      ;; Don’t update headline if the new summary is the same as the CANCELLED
+      ;; todo keyword.
+      ((equal smry org-gcal-cancelled-todo-keyword) (org-gcal--headline))
+      (smry smry)
+      ;; Set headline to “busy” if there is no existing headline and no summary
+      ;; from server.
+      ((or (null (org-gcal--headline))
+           (string-empty-p (org-gcal--headline)))
+       "busy")
+      (t (org-gcal--headline))))
     (org-entry-put (point) org-gcal-etag-property etag)
     (when recurrence (org-entry-put (point) "recurrence" (format "%s" recurrence)))
     (when loc (org-entry-put (point) "LOCATION" loc))
     (when source
-      (org-entry-put (point) "link"
-                     (org-link-make-string
-                      (plist-get source :url)
-                      (plist-get source :title))))
+      (let ((roam-refs
+             (org-entry-get-multivalued-property (point) "ROAM_REFS"))
+            (link (org-entry-get (point) "link")))
+        (cond
+         ;; ROAM_REFS can contain multiple references, but only bare URLs are
+         ;; supported. To make sure we can round-trip between ROAM_REFS and
+         ;; Google Calendar, only import to ROAM_REFS if there is no title in
+         ;; the source, and if ROAM_REFS has at most one entry.
+         ((and (null link)
+               (<= (length roam-refs) 1)
+               (or (null (plist-get source :title))
+                   (string-empty-p (plist-get source :title))))
+          (org-entry-put (point) "ROAM_REFS"
+                         (plist-get source :url)))
+         (t
+          (org-entry-put (point) "link"
+                         (org-link-make-string
+                          (plist-get source :url)
+                          (plist-get source :title)))))))
     (when transparency (org-entry-put (point) "TRANSPARENCY" transparency))
     (when meet
       (org-entry-put
@@ -1810,10 +1863,11 @@ heading."
       (org-gcal--maybe-remove-entry))))
 
 (defun org-gcal--maybe-remove-entry ()
-  "Remove the entry at the current heading, depending on the value of \
-  ‘org-gcal-remove-api-cancelled-events’."
-  (when-let ((org-gcal-remove-api-cancelled-events)
-             (smry (org-get-heading 'no-tags 'no-todo 'no-priority 'no-comment))
+  "Maybe remove the entry at the current heading
+
+Depends on the value of ‘org-gcal-remove-api-cancelled-events’."
+  (when-let (((and org-gcal-remove-api-cancelled-events))
+             (smry (org-gcal--headline))
              ((or (eq org-gcal-remove-api-cancelled-events t)
                   (y-or-n-p (format "Delete Org headline for cancelled event\n%s? "
                                     (or smry ""))))))
@@ -1898,8 +1952,12 @@ object."
              ((not (eq error-thrown nil))
               (org-gcal--notify
                (concat "Status code: " (number-to-string status-code))
-               (pp-to-string error-thrown))
-              (error "Got error %S: %S" status-code error-thrown))
+               (format "%s %s: %s"
+                       calendar-id
+                       event-id
+                       (pp-to-string error-thrown)))
+              (error "org-gcal--get-event: Got error %S for %s %s: %S"
+                     status-code calendar-id event-id error-thrown))
              ;; Fetch was successful.
              (t response))))))))
 
@@ -1938,7 +1996,9 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                    (cond
                     ((null etag) nil)
                     ((null event-id)
-                     (error "Event cannot have ETag set when event ID absent"))
+                     (error "org-gcal--post-event: %s %s %s: %s"
+                            (point-marker) calendar-id event-id
+                            "Event cannot have ETag set when event ID absent"))
                     (t
                      `(("If-Match" . ,etag)))))
          :parser 'org-gcal--json-read
