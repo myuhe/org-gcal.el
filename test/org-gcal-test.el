@@ -1,7 +1,7 @@
 ;;; org-gcal-test.el --- Tests for org-gcal.el -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2019 Robert Irelan
-;; Package-Requires: ((org-gcal) (el-mock) (emacs "26"))
+;; Package-Requires: ((org-gcal) (el-mock) (emacs "26") (load-relative "1.3"))
 
 ;; Author: Robert Irelan <rirelan@gmail.com>
 
@@ -29,6 +29,9 @@
 (require 'org-gcal)
 (require 'cl-lib)
 (require 'el-mock)
+(require 'load-relative)
+(unless (featurep 'org-test)
+  (load-relative "org-test"))
 
 (defconst org-gcal-test-calendar-id "foo@foobar.com")
 
@@ -1224,6 +1227,52 @@ Second paragraph
   ;;          "2021-03-04T03:30:00+0800"))
 
 
+(ert-deftest org-gcal-test--headline-archive-old-event ()
+  "Check that `org-gcal--archive-old-event' parses headlines correctly.
+Regression test for https://github.com/kidd/org-gcal.el/issues/172 .
+
+Also tests that the `org-gcal--archive-old-event' function does
+not loop over and over, archiving the same entry because it is
+under another heading in the same file."
+  (let ((org-archive-location "::* Archived")  ; Make the archive this same buffer
+        (test-time "2022-01-30 Sun 01:23")
+        (buf "\
+#+CATEGORY: Test
+
+* Event Title
+:PROPERTIES:
+:org-gcal-managed: something
+:END:
+<2021-01-01 Fri 12:34-14:35>
+"))
+    (org-test-with-temp-text-in-file
+        buf
+      (org-test-at-time (format "<%s>" test-time)
+        ;; Ensure property drawer is not indented
+        (setq-local org-adapt-indentation nil)
+        (let* ((target-buf (format "\
+#+CATEGORY: Test
+
+* Archived
+
+** Event Title
+:PROPERTIES:
+:org-gcal-managed: something
+:ARCHIVE_TIME: %s
+:ARCHIVE_FILE: %s
+:ARCHIVE_CATEGORY: Test
+:END:
+<2021-01-01 Fri 12:34-14:35>
+"
+                                   test-time
+                                   ; The variable `file' is the current file
+                                   ; name under the macro
+                                   ; `org-test-with-temp-text-in-file'
+                                   file)))
+          (org-gcal--archive-old-event)
+          (let ((bufstr
+                 (buffer-substring-no-properties (point-min) (point-max))))
+            (should (string-equal bufstr target-buf))))))))
 
 ;;; TODO: Figure out mocking for POST/PATCH followed by GET
 ;;; - ‘mock‘ might work for this - the argument list must be specified up

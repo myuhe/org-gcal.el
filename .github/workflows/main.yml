@@ -39,3 +39,10 @@ jobs:
 
     - name: Test
       run: make test
+
+    - name: SSH into container on failure
+      if: ${{ failure() }}
+      uses: lhotari/action-upterm@v1
+      with:
+        ## limits ssh access and adds the ssh public key for the user which triggered the workflow
+        limit-access-to-actor: true
