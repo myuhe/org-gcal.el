@@ -45,6 +45,11 @@ screen that says "This app isn't verified". You will need to click on the
 :CUSTOM_ID:  Installation
 :END:
 
+*WARNING:* The steps described below stopped working on 28.02.2022 when [[https://developers.googleblog.com/2022/02/making-oauth-flows-safer.html#disallowed-oob][Google
+deprecated the ability to retrieve OAuth 2.0 tokens via out-of-band
+redirect_uri]]. Please refer to [[https://github.com/kidd/org-gcal.el/issues/191][#191]] for more background and to track progress
+on resolving this issue.
+
 1. Go to [[https://console.developers.google.com/project][Google Developers Console]]
 
 2. Create a project (with any name)
