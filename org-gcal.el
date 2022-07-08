@@ -387,14 +387,15 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
         (deferred:nextc it
           (lambda (_)
             (org-generic-id-update-id-locations org-gcal-entry-id-property)
-            (mapc
-             (lambda (file)
-               (with-current-buffer (find-file-noselect file 'nowarn)
-                 (org-with-wide-buffer
-                  (org-gcal--sync-unlock)
-                  (org-gcal-sync-buffer skip-export silent 'filter-time
-                                        'filter-managed))))
-             org-generic-id-files))))
+            (when t
+              (mapc
+               (lambda (file)
+                 (with-current-buffer (find-file-noselect file 'nowarn)
+                   (org-with-wide-buffer
+                    (org-gcal--sync-unlock)
+                    (org-gcal-sync-buffer skip-export silent 'filter-time
+                                          'filter-managed))))
+               (org-generic-id-files))))))
       :finally
       (lambda ()
         (org-gcal--sync-unlock)))))

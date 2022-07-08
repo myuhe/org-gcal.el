@@ -16,7 +16,10 @@
 
 ;;; Code:
 
+(require 'cl-lib)
+(require 'dash)
 (require 'org)
+(require 'persist)
 
 (declare-function message-make-fqdn "message" ())
 (declare-function org-goto-location "org-goto" (&optional _buf help))
@@ -49,11 +52,65 @@ systems."
   :group 'org-generic-id
   :type 'boolean)
 
-(defvar org-generic-id-locations nil
-  "List of files with IDs in those files.")
+(defun org-generic-id--make-hash-table (&rest args)
+  "Make hash table with ‘equal’ test and optional other ARGS."
+  (apply #'make-hash-table :test #'equal args))
 
-(defvar org-generic-id-files nil
-  "List of files that contain IDs.")
+(defvar org-generic-id-locations (org-generic-id--make-hash-table)
+  "Hashtable storing map of ID names to IDs to file containing them.
+
+Example structure:
+
+#s(hash-table size 31 test equal rehash-size 1.5 rehash-threshold 0.8125 data
+              (\"entry-id\"
+                #s(hash-table size 2 test equal rehash-size 1.5
+                              rehash-threshold 0.8125 data
+                                        (\"entry-id-1\" \"file1.org\"
+                                         \"entry-id-2\" \"file2.org\")))
+              (\"other-id\"
+                #s(hash-table size 2 test equal rehash-size 1.5
+                              rehash-threshold 0.8125 data
+                                        (\"other-id-1\" \"file3.org\"
+                                         \"other-id-2\" \"file4.org\"))))
+")
+
+(defvar org-generic-id--files
+  (org-generic-id--make-hash-table :weakness 'value)
+  "Hashtable mapping file names to buffers visiting the files.
+
+The keys are file names - multiple keys may refer to the same buffer.  The
+values are as follows:
+
+- buffer: list containing the buffer corresponding to the file
+- nil: list containing nil, signifying that the file has been determined to not
+         be visited by a buffer
+- `unknown’: when the buffer for a file has not been determined.
+
+The table has weak values so that it does not cause buffers to be retained when
+they would otherwise be garbage collected (after being killed, for example).")
+
+(defun org-generic-id-files ()
+  "Return a list of all files known to have IDs."
+  (let ((tmp (org-generic-id--make-hash-table))
+        res)
+    (maphash
+     (lambda (_id-name id-hash)
+       (maphash
+        (lambda (_id file)
+          (puthash file t tmp))
+        id-hash))
+     org-generic-id-locations)
+    (maphash
+     (lambda (file _v) (push file res))
+     tmp)
+    res))
+
+(persist-defvar
+ org-generic-id--last-update-id-time nil
+ "Time at which ‘org-generic-id-update-id-locations’ last completed.
+
+This is a plist mapping each ID-PROP to the last time that ID-PROP was updated.
+For documentation on ID-PROP see ‘org-generic-id-find’.")
 
 (defcustom org-generic-id-extra-files 'org-agenda-text-search-extra-files
   "Files to be searched for IDs, besides the agenda files.
@@ -132,10 +189,9 @@ This will scan all agenda files, all associated archives, and all
 files currently mentioned in `org-generic-id-locations'.
 When FILES is given, scan also these files."
   (interactive "sID Property: ")
-  (let* (id-locations
-         (files
+  (let* ((files
           (delete-dups
-           (mapcar #'file-truename
+           (mapcar #'abbreviate-file-name
                    (cl-remove-if-not
                     ;; Default `org-generic-id-extra-files' value contains
                     ;; `agenda-archives' symbol.
@@ -148,7 +204,7 @@ When FILES is given, scan also these files."
                          (symbol-value org-generic-id-extra-files)
                        org-generic-id-extra-files)
                      ;; All files known to have IDs.
-                     org-generic-id-files
+                     (org-generic-id-files)
                      ;; Additional files from function call.
                      files)))))
          (nfiles (length files))
@@ -159,44 +215,62 @@ When FILES is given, scan also these files."
          (seen-ids nil)
          (ndup 0)
          (i 0))
+    (unless (gethash id-prop org-generic-id-locations)
+      (puthash id-prop (org-generic-id--make-hash-table) org-generic-id-locations))
     (with-temp-buffer
       (delay-mode-hooks
         (org-mode)
         (dolist (file files)
-          (when (file-exists-p file)
-            (unless silent
-              (cl-incf i)
-              (message "Finding :%s: locations (%d/%d files): %s"
-                       id-prop i nfiles file))
-            (insert-file-contents file nil nil nil 'replace)
-            (let ((ids nil)
-                  (case-fold-search t))
-              (org-with-point-at 1
-                (while (re-search-forward id-regexp nil t)
-                  (when (org-at-property-p)
-                    (push (org-entry-get (point) id-prop) ids)))
-                (when ids
-                  (push (cons (abbreviate-file-name file) ids)
-                        id-locations)
-                  (dolist (id ids)
-                    (cond
-                     ((not (member id seen-ids)) (push id seen-ids))
-                     (silent nil)
-                     (t
-                      (message "Duplicate :%s: property %S" id-prop id)
-                      (cl-incf ndup)))))))))))
-    (puthash id-prop
-             (org-generic-id--alist-to-hash id-locations)
-             org-generic-id-locations)
+          (condition-case err
+              (when-let
+                  ((file
+                    (car-safe
+                     (org-generic-id-files-modified-since-modtime
+                      (plist-get org-generic-id--last-update-id-time id-prop)
+                      (list file)
+                      org-generic-id--files))))
+                (unless silent
+                  (cl-incf i)
+                  (message "Finding :%s: locations (%d/%d files): %s"
+                           id-prop i nfiles file))
+                (goto-char (point-min))
+                (let ((buf
+                       (org-generic-id--get-file-to-buf
+                        org-generic-id--files file)))
+                  (save-excursion
+                    (if buf
+                        (switch-to-buffer buf)
+                      (insert-file-contents file nil nil nil 'replace))
+                    (save-restriction
+                      (widen)
+                      (goto-char (point-min))
+                      (let ((ids nil)
+                            (case-fold-search t))
+                        (while (re-search-forward id-regexp nil t)
+                          (when (org-at-property-p)
+                            (push (org-entry-get (point) id-prop) ids)))
+                        (dolist (id ids)
+                          (cond
+                           ((not (member id seen-ids))
+                            (push id seen-ids)
+                            (puthash id file (gethash id-prop org-generic-id-locations)))
+                           (silent nil)
+                           (t
+                            (message "Duplicate :%s: property %S" id-prop id)
+                            (cl-incf ndup)))))))))
+            (file-error
+             (warn "org-generic-id-update-id-locations: file “%s”: %S"
+                   file err))))))
     ;; Save the new locations and reload to regenerate variables.
     (org-generic-id-locations-save)
     (org-generic-id-locations-load)
+    (plist-put org-generic-id--last-update-id-time id-prop (current-time))
     (when (and (not silent) (> ndup 0))
       (warn
        "WARNING: %d duplicate :%s: properties found, check *Messages* buffer"
        ndup id-prop))
-    (message "%d files scanned, %d files contain IDs, and %d :%s: IDs found."
-             nfiles (length org-generic-id-files)
+    (message "%d files scanned, and %d :%s: IDs found."
+             nfiles
              (hash-table-count (gethash id-prop org-generic-id-locations))
              id-prop)
     org-generic-id-locations))
@@ -243,10 +317,6 @@ When FILES is given, scan also these files."
       (error
        (message "Could not read org-generic-id-values from %s.  Setting it to nil."
                 org-generic-id-locations-file))))
-  (setq org-generic-id-files
-        (apply #'append
-               (mapcar (lambda (x) (mapcar #'car (cdr x)))
-                       org-generic-id-locations)))
   (setq org-generic-id-locations (org-generic-id--locations-alist-to-hash org-generic-id-locations)))
 
 ;;;###autoload
@@ -256,13 +326,13 @@ When FILES is given, scan also these files."
   (unless file
     (error "bug: ‘org-generic-id-add-locations' expects a file-visiting buffer"))
   (let ((afile (abbreviate-file-name file)))
-    (when (and id)
+    (when id
       (let ((id-prop-hash (gethash id-prop org-generic-id-locations
-                                   (make-hash-table :test 'equal))))
+                                   (org-generic-id--make-hash-table))))
         (puthash id-prop id-prop-hash org-generic-id-locations)
         (puthash id afile id-prop-hash))
-      (unless (member afile org-generic-id-files)
-        (add-to-list 'org-generic-id-files afile)))))
+      (when (eq 'unknown (gethash afile org-generic-id--files 'unknown))
+        (puthash afile (find-buffer-visiting afile) org-generic-id--files)))))
 
 (unless noninteractive
   (add-hook 'kill-emacs-hook 'org-generic-id-locations-save))
@@ -305,8 +375,7 @@ is turned into an alist like this:
 
 (defun org-generic-id--locations-alist-to-hash (list)
   "Turn an org-generic-id location list into a hash table."
-  (let ((res (make-hash-table
-              :test 'equal
+  (let ((res (org-generic-id--make-hash-table
               :size (apply '+ (mapcar 'length list)))))
     (mapc
      (lambda (x)
@@ -316,8 +385,7 @@ is turned into an alist like this:
 
 (defun org-generic-id--alist-to-hash (list)
   "Reverse the transformation made in ‘org-generic-id--hash-to-alist’."
-  (let ((res (make-hash-table
-              :test 'equal
+  (let ((res (org-generic-id--make-hash-table
               :size (apply '+ (mapcar 'length list))))
         f)
     (mapc
@@ -369,6 +437,79 @@ optional argument MARKERP, return the position as a new marker."
                (t (cons file pos)))))
         ;; Remove opened buffer in the process.
         (unless (or visiting markerp) (kill-buffer buffer)))))))
+
+(cl-defun org-generic-id-files-modified-since-modtime (modtime files &optional file-to-buf)
+  "Return all files modified since a certain time.
+MODTIME is a timestamp of the format returned by ‘current-time’.
+of filenames that should be checked.
+
+Each filename’s modtime is checked as follows:
+
+- If there is no buffer visiting the file, the modtime is read from the file
+  system and checked against MODTIME.
+- If the buffer visiting the file is marked modified, it is always considered
+  modified.
+- Otherwise, the modtime is read using ‘visited-file-modtime’ from the buffer
+  visiting the file.
+
+FILE-TO-BUF, if present, is a hashtable mapping file names to either the buffer
+visiting that file, or nil if it’s known that no file is visiting the buffer.
+See ‘org-generic-id--files' for more information about the format."
+  (if (null modtime)
+      files
+    (cl-loop for file in files
+             when (file-exists-p file)
+             if
+             (let* ((buf (org-generic-id--get-file-to-buf file-to-buf file)))
+               (cond
+                ((null buf)
+                 (time-less-p modtime
+                              (file-attribute-modification-time
+                               (file-attributes file))))
+                ((buffer-modified-p buf) t)
+                (t
+                 (time-less-p modtime
+                              (with-current-buffer buf
+                                (visited-file-modtime))))))
+             collect file)))
+
+(defun org-generic-id--get-file-to-buf (file-to-buf file)
+  "Get buffer visiting FILE, or nil if no such buffer.
+
+If FILE or ‘(abbreviate-file-name FILE)’ is present in FILE-TO-BUF, use that.
+Otherwise, find the buffer visiting FILE if any, and cache the result in
+FILE-TO-BUF, whose format is documented at ‘org-generic-id--files’."
+  (let ((b (gethash file file-to-buf 'unknown)))
+    (if (not (eq 'unknown b))
+        b
+      (let* ((tmp (or (get-file-buffer file) (find-buffer-visiting file)))
+             (buf (when tmp (if-let ((base (buffer-base-buffer tmp))) base tmp))))
+        (org-generic-id--files-buffer-hook-impl
+         file-to-buf file buf)
+        buf))))
+
+(defun org-generic-id--files-find-file-hook ()
+  "Update ‘org-generic-id--files’ after a file is loaded."
+  (org-generic-id--files-buffer-hook-impl
+   org-generic-id--files (buffer-file-name) (current-buffer)))
+
+(defun org-generic-id--files-kill-buffer-hook ()
+ "Update ‘org-generic-id--files’ after a buffer is killed."
+ (org-generic-id--files-buffer-hook-impl
+  org-generic-id--files (buffer-file-name) nil))
+
+(defun org-generic-id--files-buffer-hook-impl (file-to-buf fname buf)
+  "Update FILE-TO-BUF to associate FNAME with BUF.
+FILE-TO-BUF has a format like ‘org-generic-id--files’."
+  (when fname
+    (let ((true-fname (abbreviate-file-name fname)))
+      (puthash fname buf file-to-buf)
+      (when (not (equal fname true-fname))
+        (puthash true-fname buf file-to-buf)))))
+
+(add-hook 'find-file-hook #'org-generic-id--files-find-file-hook)
+(add-hook 'kill-buffer-hook #'org-generic-id--files-kill-buffer-hook)
+
 
 (unless (featurep 'org-generic-id)
   (unless org-generic-id-locations
