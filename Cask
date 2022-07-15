@@ -7,7 +7,7 @@
             ;:git "https://github.com/rhaps0dy/emacs-oauth2-auto"
             :git "https://github.com/telotortium/emacs-oauth2-auto"
             :branch "main")
-(package-file "org-gcal.el")
+(package-descriptor "org-gcal-pkg.el")
 
 (files :defaults)
 
