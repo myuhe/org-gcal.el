@@ -92,7 +92,7 @@ on resolving this issue.
     ICAL, and HTML tags, you will see your Calendar ID.
 
 14. Copy the Calendar ID for use in the settings below, where you will
-    use it as the first element in the org-gcal-file-alist for
+    use it as the first element in the org-gcal-fetch-file-alist for
     associating calendars with specific org files. You can associate
     different calendars with different org files, so repeat this for
     each calendar you want to use.
@@ -247,12 +247,12 @@ in any way.
 
 ** Commands
 *** =org-gcal-fetch=
-   Fetch Google calendar events for all calendar IDs in =org-gcal-file-alist=
+   Fetch Google calendar events for all calendar IDs in =org-gcal-fetch-file-alist=
    occurring between =org-gcal-up-days= before today and =org-gcal-down-days=
    after today. If the events have already been retrieved and can be located
    using their Org-mode headline IDs, update the event in place. Otherwise,
    insert it at the end of the file corresponding to the event's calendar ID in
-   =org-gcal-file-alist=. Does not update events on the server.
+   =org-gcal-fetch-file-alist=. Does not update events on the server.
 *** =org-gcal-sync=
    Like =org-gcal-fetch=, but also update events on the server if they have
    changed locally.
