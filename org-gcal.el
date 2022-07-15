@@ -5,7 +5,7 @@
 ;; Version: 0.3
 ;; Maintainer: Raimon Grau <raimonster@gmail.com>
 ;; Copyright (C) :2014 myuhe all rights reserved.
-;; Package-Requires: ((request "20190901") (request-deferred "20181129") (alert) (persist) (oauth2-auto "0.1") (emacs "26") (org "9.3"))
+;; Package-Requires: ((request "20190901") (request-deferred "20181129") (alert) (persist) (emacs "26") (aio "1.0") (org "9.3"))
 ;; Keywords: convenience,
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -36,6 +36,7 @@
 (require 'alert)
 (require 'json)
 (require 'aio)
+;; Not on MELPA yet. Must install from https://github.com/rhaps0dy/emacs-oauth2-auto.
 (require 'oauth2-auto)
 (require 'ol)
 (require 'org)
