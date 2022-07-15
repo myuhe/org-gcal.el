@@ -5,7 +5,7 @@
 ;; Version: 0.3
 ;; Maintainer: Raimon Grau <raimonster@gmail.com>
 ;; Copyright (C) :2014 myuhe all rights reserved.
-;; Package-Requires: ((request "20190901") (request-deferred "20181129") (alert) (persist) (emacs "26") (org "9.3"))
+;; Package-Requires: ((request "20190901") (request-deferred "20181129") (alert) (persist) (oauth2-auto "0.1") (emacs "26") (org "9.3"))
 ;; Keywords: convenience,
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -35,7 +35,8 @@
 
 (require 'alert)
 (require 'json)
-(require 'request-deferred)
+(require 'aio)
+(require 'oauth2-auto)
 (require 'ol)
 (require 'org)
 (require 'org-archive)
@@ -45,6 +46,7 @@
 (require 'org-id)
 (require 'parse-time)
 (require 'persist)
+(require 'request-deferred)
 (require 'cl-lib)
 (require 'rx)
 (require 'subr-x)
@@ -299,15 +301,6 @@ See: https://developers.google.com/calendar/v3/reference/events/insert."
   :group 'org-gcal
   :type 'string)
 
-(defconst org-gcal-auth-url "https://accounts.google.com/o/oauth2/auth"
-  "Google OAuth2 server URL.")
-
-(defconst org-gcal-token-url "https://www.googleapis.com/oauth2/v3/token"
-  "Google OAuth2 server URL.")
-
-(defconst org-gcal-resource-url "https://www.googleapis.com/auth/calendar"
-  "URL used to request access to calendar resources.")
-
 (defun org-gcal-events-url (calendar-id)
   "URL used to request access to events on calendar CALENDAR-ID."
   (format "https://www.googleapis.com/calendar/v3/calendars/%s/events"
@@ -360,7 +353,6 @@ SKIP-EXPORT.  Set SILENT to non-nil to inhibit notifications."
     (user-error "org-gcal sync locked. If a previous sync has failed, call ‘org-gcal--sync-unlock’ to reset the lock and try again."))
   (org-gcal--sync-lock)
   (org-generic-id-update-id-locations org-gcal-entry-id-property)
-  (org-gcal--ensure-token)
   (when org-gcal-auto-archive
     (dolist (i org-gcal-fetch-file-alist)
       (with-current-buffer
@@ -533,10 +525,10 @@ CALENDAR-ID-FILE is a cons in ‘org-gcal-fetch-file-alist’, for which see."
    :type "GET"
    :headers
    `(("Accept" . "application/json")
-     ("Authorization" . ,(format "Bearer %s" (org-gcal--get-access-token))))
+     ("Authorization" . ,(format "Bearer %s" (org-gcal--get-access-token calendar-id))))
    :params
    (append
-    `(("access_token" . ,(org-gcal--get-access-token))
+    `(("access_token" . ,(org-gcal--get-access-token calendar-id))
       ("singleEvents" . "True"))
     (when org-gcal-local-timezone `(("timeZone" . ,org-gcal-local-timezone)))
     (seq-let [expires sync-token]
@@ -566,10 +558,10 @@ CALENDAR-ID-FILE is a cons in ‘org-gcal-fetch-file-alist’, for which see."
    :type "GET"
    :headers
    `(("Accept" . "application/json")
-     ("Authorization" . ,(format "Bearer %s" (org-gcal--get-access-token))))
+     ("Authorization" . ,(format "Bearer %s" (org-gcal--get-access-token calendar-id))))
    :params
    (append
-    `(("access_token" . ,(org-gcal--get-access-token))
+    `(("access_token" . ,(org-gcal--get-access-token calendar-id))
       ("timeMin" . ,(org-gcal--format-time2iso up-time))
       ("timeMax" . ,(org-gcal--format-time2iso down-time)))
     (when page-token `(("pageToken" . ,page-token))))
@@ -600,7 +592,7 @@ objects for further processing."
        "Received HTTP 401"
        "OAuth token expired. Now trying to refresh-token")
       (deferred:$
-        (org-gcal--refresh-token)
+        (org-gcal--refresh-token calendar-id)
         (deferred:nextc it
           (lambda (_unused)
             (funcall retry-fn)))))
@@ -801,7 +793,6 @@ to “org”."
   (when org-gcal--sync-lock
     (user-error "org-gcal sync locked. If a previous sync has failed, call ‘org-gcal--sync-unlock’ to reset the lock and try again."))
   (org-gcal--sync-lock)
-  (org-gcal--ensure-token)
   (let*
       ((name (or (buffer-file-name) (buffer-name))))
     (deferred:try
@@ -1220,7 +1211,6 @@ If SKIP-EXPORT is not nil, don’t overwrite the event on the server.
 For valid values of EXISTING-MODE see
 ‘org-gcal-managed-post-at-point-update-existing'."
   (interactive)
-  (org-gcal--ensure-token)
   (save-excursion
     ;; Post entry at point in org-agenda buffer.
     (when (eq major-mode 'org-agenda-mode)
@@ -1330,7 +1320,6 @@ If called with prefix or with CLEAR-GCAL-INFO non-nil, will clear calendar info
 from the entry even if deleting the event from the server fails.  Use this to
 delete calendar info from events on calendars you no longer have access to."
   (interactive "P")
-  (org-gcal--ensure-token)
   (save-excursion
     ;; Delete entry at point in org-agenda buffer.
     (when (eq major-mode 'org-agenda-mode)
@@ -1384,92 +1373,21 @@ delete calendar info from events on calendars you no longer have access to."
                 (deferred:succeed nil))))
         (deferred:succeed nil)))))
 
-(defun org-gcal-request-authorization ()
-  "Request OAuth authorization at AUTH-URL by launching `browse-url'.
-  CLIENT-ID is the client id provided by the provider.
-  It returns the code provided by the service."
-  (let* ((gcal-auth-url
-          (concat org-gcal-auth-url
-                  "?client_id=" (url-hexify-string org-gcal-client-id)
-                  "&response_type=code"
-                  "&redirect_uri=" (url-hexify-string "urn:ietf:wg:oauth:2.0:oob")
-                  "&scope=" (url-hexify-string org-gcal-resource-url)))
-         (prompt
-          (format
-           "Please visit (if it doesn't open automatically): %s\n\nEnter the code your browser displayed:"
-           gcal-auth-url)))
-    (browse-url gcal-auth-url)
-    (read-string prompt)))
+(defun org-gcal--get-access-token (calendar-id)
+  "Return the access token for CALENDAR-ID."
+  (aio-wait-for
+   (oauth2-auto-access-token calendar-id 'org-gcal)))
 
-(defun org-gcal-request-token ()
-  "Refresh OAuth access at TOKEN-URL.
-
-  Returns a ‘deferred’ object that can be used to wait for completion."
-  (interactive)
-  (deferred:$
-    (request-deferred
-     org-gcal-token-url
-     :type "POST"
-     :data `(("client_id" . ,org-gcal-client-id)
-             ("client_secret" . ,org-gcal-client-secret)
-             ("code" . ,(org-gcal-request-authorization))
-             ("redirect_uri" .  "urn:ietf:wg:oauth:2.0:oob")
-             ("grant_type" . "authorization_code"))
-     :parser 'org-gcal--json-read)
-    (deferred:nextc it
-      (lambda (response)
-        (let
-            ((data (request-response-data response))
-             (status-code (request-response-status-code response))
-             (error-thrown (request-response-error-thrown response)))
-          (cond
-           ;; If there is no network connectivity, the response will not
-           ;; include a status code.
-           ((eq status-code nil)
-            (org-gcal--notify
-             "Got Error"
-             "Could not contact remote service. Please check your network connectivity.")
-            (error "Network connectivity issue %s: %s" status-code error-thrown))
-           ;; Generic error-handler meant to provide useful information about
-           ;; failure cases not otherwise explicitly specified.
-           ((not (eq error-thrown nil))
-            (org-gcal--notify
-             (concat "Status code: " (number-to-string status-code))
-             (pp-to-string error-thrown))
-            (error "Got error %S: %S" status-code error-thrown))
-           ;; Fetch was successful.
-           (t
-            (when data
-              (setq org-gcal-token-plist data)
-              (org-gcal--save-sexp data org-gcal-token-file))
-            (deferred:succeed nil))))))))
-
-(defun org-gcal--refresh-token ()
+(defun org-gcal--refresh-token (calendar-id)
   "Refresh OAuth access and return the new access token as a deferred object."
-  (deferred:$
-    (request-deferred
-     org-gcal-token-url
-     :type "POST"
-     :data `(("client_id" . ,org-gcal-client-id)
-             ("client_secret" . ,org-gcal-client-secret)
-             ("refresh_token" . ,(org-gcal--get-refresh-token))
-             ("grant_type" . "refresh_token"))
-     :parser 'org-gcal--json-read)
-    (deferred:nextc it
-      (lambda (response)
-        (let ((data (request-response-data response))
-              (status-code (request-response-status-code response))
-              (error-thrown (request-response-error-thrown response)))
-          (cond
-           ((eq error-thrown nil)
-            (plist-put org-gcal-token-plist
-                       :access_token
-                       (plist-get data :access_token))
-            (org-gcal--save-sexp org-gcal-token-plist org-gcal-token-file)
-            (let ((_token (plist-get org-gcal-token-plist :access_token)))
-              (deferred:succeed nil)))
-           (t
-            (error "Got error %S: %S" status-code error-thrown))))))))
+  ;; FIXME: For now, we just synchronously wait for the refresh. Once the
+  ;; project has been rewritten to use aio
+  ;; (https://github.com/kidd/org-gcal.el/issues/191), we can wait for this
+  ;; asynchronously as well.
+  (let ((token
+         (aio-wait-for
+          (oauth2-auto-access-token calendar-id 'org-gcal))))
+    (deferred:succeed token)))
 
 ;;;###autoload
 (defun org-gcal-sync-tokens-clear ()
@@ -1491,7 +1409,7 @@ delete calendar info from events on calendars you no longer have access to."
         ; Check if headline is managed by `org-gcal', and hasn't been archived
         ; yet. Only in that case, potentially archive.
         (when (and (assoc "ORG-GCAL-MANAGED" properties)
-                     (not (assoc "ARCHIVE_TIME" properties)))
+                   (not (assoc "ARCHIVE_TIME" properties)))
 
           ; Go to beginning of line to parse the headline
           (beginning-of-line)
@@ -1549,30 +1467,6 @@ delete calendar info from events on calendars you no longer have access to."
     (json-read-from-string
      (decode-coding-string
       (buffer-substring-no-properties (point-min) (point-max)) 'utf-8))))
-
-(defun org-gcal--get-refresh-token ()
-  (if org-gcal-token-plist
-      (plist-get org-gcal-token-plist :refresh_token)
-    (progn
-      (if (file-exists-p org-gcal-token-file)
-          (progn
-            (with-temp-buffer (insert-file-contents org-gcal-token-file)
-                              (plist-get (plist-get (read (buffer-string)) :token) :refresh_token)))
-        (org-gcal--notify
-         (concat org-gcal-token-file " does not exist.")
-         (concat "Please create " org-gcal-token-file " before proceeding."))))))
-
-(defun org-gcal--get-access-token ()
-  (if org-gcal-token-plist
-      (plist-get org-gcal-token-plist :access_token)
-    (progn
-      (if (file-exists-p org-gcal-token-file)
-          (progn
-            (with-temp-buffer (insert-file-contents org-gcal-token-file)
-                              (plist-get (plist-get (read (buffer-string)) :token) :access_token)))
-        (org-gcal--notify
-         (concat org-gcal-token-file " is not exists")
-         (concat "Make " org-gcal-token-file))))))
 
 (defun org-gcal--safe-substring (string from &optional to)
   "Call the `substring' function safely.
@@ -1913,7 +1807,7 @@ access token A-TOKEN is not specified, it is loaded from the token file.
 
 Returns a ‘deferred’ function that on success returns a ‘request-response‘
 object."
-  (let ((a-token (org-gcal--get-access-token)))
+  (let ((a-token (org-gcal--get-access-token calendar-id)))
     (deferred:$
       (request-deferred
        (concat
@@ -1944,7 +1838,7 @@ object."
                "Received HTTP 401"
                "OAuth token expired. Now trying to refresh token.")
               (deferred:$
-                (org-gcal--refresh-token)
+                (org-gcal--refresh-token calendar-id)
                 (deferred:nextc it
                   (lambda (_unused)
                     (org-gcal--get-event calendar-id event-id)))))
@@ -1977,7 +1871,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
         (etime (org-gcal--param-date end))
         (stime-alt (org-gcal--param-date-alt start))
         (etime-alt (org-gcal--param-date-alt end))
-        (a-token (or a-token (org-gcal--get-access-token))))
+        (a-token (or a-token (org-gcal--get-access-token calendar-id))))
     (deferred:try
       (deferred:$
         (apply
@@ -2041,7 +1935,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                  "Received HTTP 401"
                  "OAuth token expired. Now trying to refresh-token")
                 (deferred:$
-                  (org-gcal--refresh-token)
+                  (org-gcal--refresh-token calendar-id)
                   (deferred:nextc it
                     (lambda (_unused)
                       (org-gcal--post-event start end smry loc source desc calendar-id
@@ -2108,7 +2002,7 @@ If ETAG is provided, it is used to retrieve the event data from the server and
 overwrite the event at MARKER if the event has changed on the server.
 
 Returns a ‘deferred’ object that can be used to wait for completion."
-  (let ((a-token (or a-token (org-gcal--get-access-token))))
+  (let ((a-token (or a-token (org-gcal--get-access-token calendar-id))))
     (deferred:try
       (deferred:$
         (request-deferred
@@ -2148,7 +2042,7 @@ Returns a ‘deferred’ object that can be used to wait for completion."
                  "Received HTTP 401"
                  "OAuth token expired. Now trying to refresh-token")
                 (deferred:$
-                  (org-gcal--refresh-token)
+                  (org-gcal--refresh-token calendar-id)
                   (deferred:nextc it
                     (lambda (_unused)
                       (org-gcal--delete-event calendar-id event-id
@@ -2225,22 +2119,6 @@ Returns a ‘deferred’ object that can be used to wait for completion."
 (with-eval-after-load 'org-refile
   (add-hook 'org-after-refile-insert-hook 'org-gcal--refile-post))
 
-(defun org-gcal--ensure-token ()
-  "Ensure that access, refresh, and sync token variables in expected state."
-  (unless (org-gcal--sync-tokens-valid)
-    (persist-load 'org-gcal--sync-tokens)
-    (unless (org-gcal--sync-tokens-valid)
-      (org-gcal-sync-tokens-clear)))
-  (cond
-   (org-gcal-token-plist t)
-   ((and (file-exists-p org-gcal-token-file)
-         (ignore-errors
-           (setq org-gcal-token-plist
-                 (with-temp-buffer
-                   (insert-file-contents org-gcal-token-file)
-                   (plist-get (read (current-buffer)) :token))))) t)
-   (t (deferred:sync! (org-gcal-request-token)))))
-
 (defun org-gcal--sync-tokens-valid ()
   "Is ‘org-gcal--sync-tokens’ in a valid format?"
   (and (listp org-gcal--sync-tokens)
@@ -2281,6 +2159,24 @@ non-nil."
     (plist-get plst :mon)
     (plist-get plst :year))))
 
+
+(defun org-gcal-reload-client-id-secret ()
+  "Setup OAuth2 authentication after setting client ID and secret."
+  (interactive)
+  (add-to-list
+   'oauth2-auto-additional-providers-alist
+   `(org-gcal
+     (authorize_url . "https://accounts.google.com/o/oauth2/auth")
+     (token_url . "https://oauth2.googleapis.com/token")
+     (scope . "https://www.googleapis.com/auth/calendar")
+     (client_id . ,org-gcal-client-id)
+     (client_secret . ,org-gcal-client-secret))))
+
+(if (and org-gcal-client-id org-gcal-client-secret)
+    (org-gcal-reload-client-id-secret)
+  ;; Don’t print warning during tests.
+  (unless noninteractive
+    (warn "org-gcal: must set ‘org-gcal-client-id’ and ‘org-gcal-client-secret’ for this package to work. Please run ‘org-gcal-reload-client-id-secret’ after setting these variables.")))
 
 (provide 'org-gcal)
 
