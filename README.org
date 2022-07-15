@@ -30,6 +30,9 @@ screen that says "This app isn't verified". You will need to click on the
 - [[https://github.com/tkf/emacs-request][tkf/emacs-request]]
 - [[https://github.com/jwiegley/alert][jwiegley/alert]]
 - [[https://elpa.gnu.org/packages/persist.html][~persist~]]
+- [[https://github.com/skeeto/emacs-aio][skeeto/emacs-aio]]
+- [[https://github.com/rhaps0dy/emacs-oauth2-auto][rhaps0dy/emacs-oauth2-auto]] (actually using vendored fork
+  [[https://github.com/telotortium/emacs-oauth2-auto/tree/main][telotortium/emacs-oauth2-auto]])
 
   =org-gcal= is now available in the famous emacs package repo [[http://melpa.milkbox.net/][MELPA]], so the
   recommended way is to install it through Emacs package management system.
@@ -100,11 +103,21 @@ on resolving this issue.
 ** Setting example
 
 #+begin_src elisp
-(require 'org-gcal)
 (setq org-gcal-client-id "your-id-foo.apps.googleusercontent.com"
       org-gcal-client-secret "your-secret"
       org-gcal-fetch-file-alist '(("your-mail@gmail.com" .  "~/schedule.org")
                                   ("another-mail@gmail.com" .  "~/task.org")))
+(require 'org-gcal)
+#+end_src
+
+*** Note
+
+This package uses ~plstore~ as a dependency for storing OAuth tokens. In order
+to avoid getting prompted all the time for the password to your plstore, it is
+recommended that you put the following in your init.el:
+
+#+begin_src elisp
+(setq plstore-cache-passphrase-for-symmetric-encryption t)
 #+end_src
 
 ** Multiple accounts
@@ -275,12 +288,6 @@ in any way.
    If the event has changed on the server since it was last retrieved (detected
    using the =ETag= property), automatically update the headline using the
    event data from the server instead of updating the event on the server.
-*** =org-gcal-request-token=
-   Request new OAuth access and refresh tokens. You should not need to call
-   this function in normal use, since it is called automatically on the first
-   run. However, you can call it again if for some reason the tokens stop
-   working. This should be rare - =org-gcal= will automatically refresh the
-   OAuth access token when it expires (every 3600 seconds).
 
 ** Deleting events
 
