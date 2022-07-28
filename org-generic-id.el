@@ -226,7 +226,7 @@ When FILES is given, scan also these files."
                   ((file
                     (car-safe
                      (org-generic-id-files-modified-since-modtime
-                      (plist-get org-generic-id--last-update-id-time id-prop)
+                      (org-generic-id--last-update-id-time-get id-prop)
                       (list file)
                       org-generic-id--files))))
                 (unless silent
@@ -264,7 +264,7 @@ When FILES is given, scan also these files."
     ;; Save the new locations and reload to regenerate variables.
     (org-generic-id-locations-save)
     (org-generic-id-locations-load)
-    (plist-put org-generic-id--last-update-id-time id-prop (current-time))
+    (org-generic-id--last-update-id-time-put id-prop (current-time))
     (when (and (not silent) (> ndup 0))
       (warn
        "WARNING: %d duplicate :%s: properties found, check *Messages* buffer"
@@ -487,6 +487,25 @@ FILE-TO-BUF, whose format is documented at ‘org-generic-id--files’."
         (org-generic-id--files-buffer-hook-impl
          file-to-buf file buf)
         buf))))
+
+(defun org-generic-id--last-update-id-time-get (id-prop)
+  "Get last update ID time for ID-PROP.
+ID-PROP is a string.  This function converts ID-PROP to a symbol in order to
+query ‘org-generic-id--last-update-id-time' using ‘plist-get’."
+  (plist-get org-generic-id--last-update-id-time (intern id-prop)))
+
+(defun org-generic-id--last-update-id-time-put (id-prop time)
+  "Set last update ID time for ID-PROP to TIME.
+ID-PROP is a string; TIME is an Emacs time value as returned by ‘encode-time’.
+This function converts ID-PROP to a symbol in order to query
+‘org-generic-id--last-update-id-time' using ‘plist-put’."
+  ;; Work around the fact that ‘plist-put’ does nothing if the plist is nil,
+  ;; since a nil list can’t be mutated in place.
+  (if org-generic-id--last-update-id-time
+      (setq org-generic-id--last-update-id-time
+            (list (intern id-prop) time))
+    (plist-put org-generic-id--last-update-id-time
+               (intern id-prop) time)))
 
 (defun org-generic-id--files-find-file-hook ()
   "Update ‘org-generic-id--files’ after a file is loaded."
