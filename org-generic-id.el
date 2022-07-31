@@ -502,10 +502,10 @@ This function converts ID-PROP to a symbol in order to query
   ;; Work around the fact that ‘plist-put’ does nothing if the plist is nil,
   ;; since a nil list can’t be mutated in place.
   (if org-generic-id--last-update-id-time
-      (setq org-generic-id--last-update-id-time
-            (list (intern id-prop) time))
-    (plist-put org-generic-id--last-update-id-time
-               (intern id-prop) time)))
+      (plist-put org-generic-id--last-update-id-time
+                 (intern id-prop) time)
+    (setq org-generic-id--last-update-id-time
+          (list (intern id-prop) time))))
 
 (defun org-generic-id--files-find-file-hook ()
   "Update ‘org-generic-id--files’ after a file is loaded."
