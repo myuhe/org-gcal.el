@@ -239,7 +239,7 @@ When FILES is given, scan also these files."
                         org-generic-id--files file)))
                   (save-excursion
                     (if buf
-                        (switch-to-buffer buf)
+                        (set-buffer buf)
                       (insert-file-contents file nil nil nil 'replace))
                     (save-restriction
                       (widen)
