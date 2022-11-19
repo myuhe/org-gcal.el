@@ -8,7 +8,7 @@ jobs:
 
     strategy:
       matrix:
-        emacs_version: ['26.1', '27.1', 'snapshot']
+        emacs_version: ['26.1', '26.3', '27.2', '28.2', 'snapshot']
         cask_version: ['snapshot']
 
     steps:
@@ -18,7 +18,7 @@ jobs:
     - name: Install Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.6'
+        python-version: '3.9'
         architecture: 'x64'
 
     - name: Install Emacs
@@ -26,10 +26,24 @@ jobs:
       with:
         version: ${{matrix.emacs_version}}
 
-    - name: Install Cask
-      uses: conao3/setup-cask@master
+    - uses: actions/cache@v2
+      id: cache-cask-packages
       with:
-        version: 'snapshot'
+        path: .cask
+        key: cache-cask-packages-000
+
+    - uses: actions/cache@v2
+      id: cache-cask-executable
+      with:
+        path: ~/.cask
+        key: cache-cask-executable-000
+
+    - name: Install Cask
+      uses: cask/setup-cask@master
+      if: steps.cache-cask-executable.outputs.cache-hit != 'true'
+      with:
+        version: snapshot
+    - run: echo "$HOME/.cask/bin" >> $GITHUB_PATH
 
     - name: Install dependencies
       run: make elpa
@@ -43,6 +57,7 @@ jobs:
     - name: SSH into container on failure
       if: ${{ failure() }}
       uses: lhotari/action-upterm@v1
+      timeout-minutes: 30
       with:
         ## limits ssh access and adds the ssh public key for the user which triggered the workflow
         limit-access-to-actor: true
