@@ -1,7 +1,9 @@
 (source melpa)
 (source gnu)
 
-(package-file "org-gcal.el")
+(package-descriptor "org-gcal-pkg.el")
+
+(files :defaults)
 
 (development
   (depends-on "el-mock")

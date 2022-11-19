@@ -26,6 +26,13 @@
 
 ;;; Code:
 
+;; Must set these variables before loading the package, but don’t reset them if
+;; they’re already set.
+(unless (and (boundp 'org-gcal-client-id) org-gcal-client-id
+             (boundp 'org-gcal-client-secret) org-gcal-client-secret)
+  (setq org-gcal-client-id "test_client_id"
+        org-gcal-client-secret "test_client_secret"))
+
 (require 'org-gcal)
 (require 'cl-lib)
 (require 'el-mock)
@@ -588,7 +595,8 @@ Second paragraph
    (with-mock
     (stub org-gcal--time-zone => '(0 "UTC"))
     (stub org-generic-id-add-location => nil)
-    (stub org-gcal-request-token => (deferred:succeed nil))
+    (stub org-gcal--get-access-token => "my_access_token")
+    (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
     (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                 "My event summary" "Foobar's desk"
                                 `((url . "https://google.com") (title . "Google"))
@@ -631,7 +639,8 @@ Original second paragraph
       (with-mock
         (stub org-gcal--time-zone => '(0 "UTC"))
         (stub org-generic-id-add-location => nil)
-        (stub org-gcal-request-token => (deferred:succeed nil))
+        (stub org-gcal--get-access-token => "my_access_token")
+        (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
         (stub request-deferred =>
               (deferred:succeed
                 (make-request-response
@@ -697,7 +706,8 @@ Second paragraph
     (with-mock
       (stub org-gcal--time-zone => '(0 "UTC"))
       (stub org-generic-id-add-location => nil)
-      (stub org-gcal-request-token => (deferred:succeed nil))
+      (stub org-gcal--get-access-token => "my_access_token")
+      (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
       (mock (y-or-n-p *) => nil)
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                   "My event summary" "Foobar's desk"
@@ -734,7 +744,8 @@ Second paragraph
     (with-mock
       (stub org-gcal--time-zone => '(0 "UTC"))
       (stub org-generic-id-add-location => nil)
-      (stub org-gcal-request-token => (deferred:succeed nil))
+      (stub org-gcal--get-access-token => "my_access_token")
+      (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                   "My event summary" "Foobar's desk"
                                   `((url . "https://google.com") (title . "Google"))
@@ -768,7 +779,8 @@ Second paragraph
     (with-mock
       (stub org-gcal--time-zone => '(0 "UTC"))
       (stub org-generic-id-add-location => nil)
-      (stub org-gcal-request-token => (deferred:succeed nil))
+      (stub org-gcal--get-access-token => "my_access_token")
+      (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
       (mock (y-or-n-p *) => nil)
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                   "My event summary" "Foobar's desk"
@@ -805,7 +817,8 @@ Second paragraph
     (with-mock
       (stub org-gcal--time-zone => '(0 "UTC"))
       (stub org-generic-id-add-location => nil)
-      (stub org-gcal-request-token => (deferred:succeed nil))
+      (stub org-gcal--get-access-token => "my_access_token")
+      (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
       (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                   "My event summary" "Foobar's desk"
                                   `((url . "https://google.com") (title . "Google"))
@@ -842,7 +855,8 @@ Second paragraph
    (with-mock
     (stub org-gcal--time-zone => '(0 "UTC"))
     (stub org-generic-id-add-location => nil)
-    (stub org-gcal-request-token => (deferred:succeed nil))
+    (stub org-gcal--get-access-token => "my_access_token")
+    (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
     (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                 "My event summary" "Foobar's desk"
                                 `((url . "https://google.com") (title . "Google"))
@@ -875,7 +889,8 @@ Second paragraph
    (with-mock
     (stub org-gcal--time-zone => '(0 "UTC"))
     (stub org-generic-id-add-location => nil)
-    (stub org-gcal-request-token => (deferred:succeed nil))
+    (stub org-gcal--get-access-token => "my_access_token")
+    (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
     (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
                                 "My event summary" "Foobar's desk"
                                 `((url . "https://google.com") (title . "Google"))
@@ -910,15 +925,16 @@ Second paragraph
     (with-mock
       (stub org-gcal--time-zone => '(0 "UTC"))
       (stub org-generic-id-add-location => nil)
-      (stub org-gcal-request-token => (deferred:succeed nil))
-      (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
-                                  "My event summary" "Foobar's desk"
-                                  `((url . "https://google.com") (title . "Google"))
-                                  "My event description\n\nSecond paragraph"
-                                  "foo@foobar.com"
-                                  * "opaque" nil nil
-                                  * * *))
-      (org-gcal-post-at-point)))
+     (stub org-gcal--get-access-token => "my_access_token")
+     (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
+     (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
+                                 "My event summary" "Foobar's desk"
+                                 `((url . "https://google.com") (title . "Google"))
+                                 "My event description\n\nSecond paragraph"
+                                 "foo@foobar.com"
+                                 * "opaque" nil nil
+                                 * * *))
+     (org-gcal-post-at-point)))
   (org-gcal-test--with-temp-buffer
       "\
 * My event summary
@@ -940,15 +956,16 @@ Second paragraph
     (with-mock
       (stub org-gcal--time-zone => '(0 "UTC"))
       (stub org-generic-id-add-location => nil)
-      (stub org-gcal-request-token => (deferred:succeed nil))
-      (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
-                                  "My event summary" "Foobar's desk"
-                                  `((url . "https://google.com") (title . "Google"))
-                                  "My event description\n\nSecond paragraph"
-                                  "foo@foobar.com"
-                                  * "opaque" nil nil
-                                  * * *))
-      (org-gcal-post-at-point))))
+     (stub org-gcal--get-access-token => "my_access_token")
+     (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
+     (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-06T21:00:00Z"
+                                 "My event summary" "Foobar's desk"
+                                 `((url . "https://google.com") (title . "Google"))
+                                 "My event description\n\nSecond paragraph"
+                                 "foo@foobar.com"
+                                 * "opaque" nil nil
+                                 * * *))
+     (org-gcal-post-at-point))))
 
 (ert-deftest org-gcal-test--post-at-point-no-properties ()
   "Verify that ‘org-gcal-post-to-point’ fills in entries with no relevant
@@ -963,7 +980,8 @@ org-gcal properties with sane default values."
     (stub read-from-minibuffer => "4:00")
     (stub org-gcal--time-zone => '(0 "UTC"))
     (stub org-generic-id-add-location => nil)
-    (stub org-gcal-request-token => (deferred:succeed nil))
+    (stub org-gcal--get-access-token => "my_access_token")
+    (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
     (mock (org-gcal--post-event "2019-10-06T17:00:00+0000" "2019-10-06T21:00:00+0000"
                                 "My event summary" nil
                                 nil nil
@@ -986,7 +1004,8 @@ CLOCK: [2019-06-06 Thu 17:00]--[2019-06-06 Thu 18:00] => 1:00
     (stub org-read-date => (encode-time 0 0 17 6 10 2019 nil nil t))
     (stub org-gcal--time-zone => '(0 "UTC"))
     (stub org-generic-id-add-location => nil)
-    (stub org-gcal-request-token => (deferred:succeed nil))
+    (stub org-gcal--get-access-token => "my_access_token")
+    (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
     (cl-letf
         (((symbol-function #'read-from-minibuffer)
           (lambda (_p initial-contents) initial-contents)))
@@ -1003,7 +1022,7 @@ CLOCK: [2019-06-06 Thu 17:00]--[2019-06-06 Thu 18:00] => 1:00
 an event ID is not."
   :expected-result :failed
   (org-gcal-test--with-temp-buffer
-      "\
+   "\
 * My event summary
 :PROPERTIES:
 :LOCATION: Foobar's desk
@@ -1019,12 +1038,13 @@ My event description
 Second paragraph
 :END:
 "
-    (with-mock
-      (stub org-gcal--time-zone => '(0 "UTC"))
-      (stub org-generic-id-add-location => nil)
-      (stub org-gcal-request-token => (deferred:succeed nil))
-      (stub request-deferred => (deferred:succeed nil))
-      (org-gcal-post-at-point))))
+   (with-mock
+    (stub org-gcal--time-zone => '(0 "UTC"))
+    (stub org-generic-id-add-location => nil)
+    (stub org-gcal--get-access-token => "my_access_token")
+    (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
+    (stub request-deferred => (deferred:succeed nil))
+    (org-gcal-post-at-point))))
 
 (ert-deftest org-gcal-test--post-at-point-time-date-range ()
   "Verify that entry with a time/date range for its timestamp is parsed by
@@ -1050,7 +1070,8 @@ Second paragraph
    (with-mock
     (stub org-gcal--time-zone => '(0 "UTC"))
     (stub org-generic-id-add-location => nil)
-    (stub org-gcal-request-token => (deferred:succeed nil))
+    (stub org-gcal--get-access-token => "my_access_token")
+    (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
     (mock (org-gcal--post-event "2019-10-06T17:00:00Z" "2019-10-07T21:00:00Z"
                                 "My event summary" "Foobar's desk"
                                 `((url . "https://google.com") (title . "Google"))
@@ -1091,7 +1112,8 @@ Second paragraph
       (let ((deferred:debug t))
         (stub org-gcal--time-zone => '(0 "UTC")))
       (stub org-generic-id-add-location => nil)
-      (stub org-gcal-request-token => (deferred:succeed nil))
+      (stub org-gcal--get-access-token => "my_access_token")
+      (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
       (stub y-or-n-p => t)
       (stub alert => t)
       (stub request-deferred =>
@@ -1113,7 +1135,8 @@ Second paragraph
       (let ((deferred:debug t))
         (stub org-gcal--time-zone => '(0 "UTC"))
         (stub org-generic-id-add-location => nil)
-        (stub org-gcal-request-token => (deferred:succeed nil))
+        (stub org-gcal--get-access-token => "my_access_token")
+        (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
         (stub y-or-n-p => t)
         (stub request-deferred =>
               (deferred:succeed
@@ -1130,7 +1153,8 @@ Second paragraph
       (let ((deferred:debug t)
             (org-gcal-remove-api-cancelled-events t))
         (stub org-gcal--time-zone => '(0 "UTC"))
-        (stub org-gcal-request-token => (deferred:succeed nil))
+        (stub org-gcal--get-access-token => "my_access_token")
+        (stub org-gcal--refresh-token => (deferred:succeed "test_access_token"))
         (stub y-or-n-p => t)
         (stub request-deferred =>
               (deferred:succeed
