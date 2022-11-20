@@ -127,8 +127,8 @@ from PLIST if non-nil.  The return value is intended to be stored in plstore."
 ;; Checking token expiration
 
 (defun oauth2-auto--now ()
-  "Current epoch in seconds."
-  (seconds-to-time nil 'integer))
+  "Current epoch in seconds, as an integer."
+  (truncate (float-time)))
 
 (defun oauth2-auto--plist-needs-refreshing (plist)
   "Return non-nil if the authentication-token in PLIST needs refreshing."
